@@ -1,0 +1,1314 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head><body style="margin:0">
+<title>心エコー断面シミュレーター</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: echo-console workbench. 3D heart (where the probe sits) beside the sector image (what you see), teaching panel underneath. Single dark theme on purpose: echo is read in a dim room. */
+:root{
+  --bg:#0c1013; --panel:#131a1f; --panel2:#182128; --line:#24303a;
+  --fg:#e3eaee; --muted:#8a9aa4; --accent:#d9b26f; --accent-ink:#1a1408;
+  --lad:#5b9dff; --lcx:#3cc9a0; --rca:#f07a8c;
+  --f-display:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Yu Gothic",sans-serif;
+  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic","Meiryo",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"Consolas",monospace;
+  color-scheme:dark;
+}
+html,body{background:var(--bg);color:var(--fg)}
+body{font-family:var(--f-body);font-size:15px;line-height:1.7}
+.wrap{max-width:1280px;margin:0 auto;padding:20px 16px 48px;display:flex;flex-direction:column;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 24px}
+.eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;color:var(--accent);text-transform:uppercase}
+h1{font-family:var(--f-display);font-weight:700;font-size:clamp(22px,3.2vw,32px);margin:2px 0 0;line-height:1.25;text-wrap:balance}
+header p{margin:0;color:var(--muted);max-width:52ch;font-size:13.5px}
+.views{display:flex;flex-wrap:wrap;gap:10px 18px}
+.vgroup{display:flex;flex-direction:column;gap:6px;min-width:0}
+.vgroup .gl{font-size:11px;color:var(--muted);letter-spacing:.08em}
+.vgroup .chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:inherit;font-size:13px;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer;display:inline-flex;gap:7px;align-items:baseline}
+.chip b{font-family:var(--f-mono);font-weight:600;font-size:11.5px;color:var(--accent)}
+.chip:hover{border-color:#3a4a56}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.chip[aria-pressed="true"] b{color:var(--accent-ink)}
+.chip:focus-visible,.tog:focus-visible,.tab:focus-visible,.legend li:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:16px}
+@media (max-width:860px){.stage{grid-template-columns:minmax(0,1fr)}}
+.pane{background:var(--panel);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.pane-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.pane-head .t{font-family:var(--f-display);font-weight:700;font-size:15px}
+.pane-head .hint{font-size:11.5px;color:var(--muted)}
+.three{position:relative;aspect-ratio:1/1;max-width:100%;background:radial-gradient(ellipse at 50% 40%,#1a252d 0%,#0d1216 70%);touch-action:pan-y;cursor:grab}
+.three:active{cursor:grabbing}
+.three canvas{display:block;width:100%;height:100%}
+#labels3d{position:absolute;inset:0;pointer-events:none}
+.l3{position:absolute;transform:translate(-50%,-50%);font-family:var(--f-mono);font-size:10.5px;padding:1px 6px;border-radius:4px;background:rgba(12,16,19,.72);color:var(--fg);white-space:nowrap;border:1px solid rgba(255,255,255,.08)}
+.move{position:absolute;left:10px;top:8px;right:10px;font-size:12.5px;color:var(--accent);pointer-events:none;text-shadow:0 1px 2px #000}
+.l3.bone{font-size:9.5px;color:#e9dfc8;border-color:rgba(233,223,200,.35);background:rgba(12,16,19,.55)}
+.orient{position:absolute;left:10px;bottom:8px;font-size:11px;color:var(--muted);pointer-events:none}
+.echo-box{background:#000;position:relative}
+#echo{display:block;width:100%;height:auto}
+.ctrl{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;border-top:1px solid var(--line)}
+.tog{font:inherit;font-size:12.5px;background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer}
+.tog[aria-pressed="true"]{color:var(--fg);border-color:var(--accent);background:rgba(217,178,111,.12)}
+.info{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);padding:0 8px;overflow-x:auto}
+.tab{font:inherit;font-size:14px;background:none;border:0;color:var(--muted);padding:11px 14px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tab[aria-selected="true"]{color:var(--fg);border-bottom-color:var(--accent)}
+.tpanel{padding:18px 20px 22px}
+.tpanel h3{font-family:var(--f-display);font-size:17px;margin:0 0 6px;text-wrap:balance}
+.tpanel h4{font-family:var(--f-display);font-size:14.5px;margin:16px 0 4px;color:var(--accent)}
+.tpanel p{margin:0 0 8px;max-width:68ch}
+.tpanel ul{margin:0;padding-left:1.2em;max-width:70ch}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px 28px}
+.cols>*{min-width:0}
+.legend{list-style:none;padding:0!important;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:6px 18px;max-width:none!important}
+.legend li{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;padding:6px 8px;border-radius:6px;cursor:default}
+.legend li:hover,.legend li.on{background:var(--panel2)}
+.legend .ab{font-family:var(--f-mono);font-size:12px;font-weight:600;color:var(--accent);min-width:3.6em}
+.legend .nm{font-weight:700;font-size:14px}
+.legend .ds{grid-column:2;font-size:12.5px;color:var(--muted);line-height:1.55}
+.cor{display:grid;grid-template-columns:220px minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:640px){.cor{grid-template-columns:minmax(0,1fr)}}
+#bulls{width:220px;max-width:100%;height:auto}
+.key{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;margin:6px 0 10px}
+.key span{display:inline-flex;align-items:center;gap:6px}
+.key i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.seglist{list-style:none;padding:0!important;margin:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:4px 16px}
+.seglist li{display:flex;gap:8px;align-items:baseline;font-size:13px}
+.seglist .n{font-family:var(--f-mono);font-size:11.5px;min-width:1.8em;text-align:right;color:var(--muted)}
+.seglist .d{width:9px;height:9px;border-radius:2px;flex:none;align-self:center}
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:620px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11.5px;color:var(--muted);font-weight:500;letter-spacing:.05em}
+td.v{font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td.ex{font-family:var(--f-mono);color:var(--accent);white-space:nowrap}
+td .how{display:block;color:var(--muted);font-size:12.5px}
+.note{font-size:12.5px;color:var(--muted);margin-top:10px}
+.callout{background:var(--panel2);border-radius:8px;padding:10px 14px;margin:12px 0 0;font-size:13.5px;max-width:72ch}
+
+.corsec{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.corgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0}
+@media (max-width:860px){.corgrid{grid-template-columns:minmax(0,1fr)}}
+.cor3d{position:relative;aspect-ratio:1/1;max-width:100%;background:radial-gradient(ellipse at 50% 40%,#1a252d 0%,#0d1216 70%);touch-action:pan-y;cursor:grab}
+.cor3d canvas{display:block;width:100%;height:100%}
+#corLabels{position:absolute;inset:0;pointer-events:none}
+.cl{position:absolute;transform:translate(-50%,-50%);font-family:var(--f-mono);font-size:10.5px;font-weight:600;padding:0 5px;border-radius:4px;background:rgba(12,16,19,.78);white-space:nowrap;border:1px solid currentColor}
+#corTip{position:absolute;pointer-events:none;font-size:12.5px;background:rgba(12,16,19,.9);border:1px solid var(--line);border-radius:6px;padding:3px 8px;white-space:nowrap}
+.corside{padding:14px 18px 18px;display:flex;flex-direction:column;gap:12px;min-width:0;border-left:1px solid var(--line)}
+@media (max-width:860px){.corside{border-left:0;border-top:1px solid var(--line)}}
+.bgroup{display:flex;flex-direction:column;gap:6px}
+.bgroup .gl{font-size:11.5px;color:var(--muted)}
+.bchips{display:flex;flex-wrap:wrap;gap:5px}
+.bchip{font:inherit;font-size:12.5px;color:var(--fg);background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--c);border-radius:6px;padding:3px 9px;cursor:pointer}
+.bchip b{font-family:var(--f-mono);font-size:11px;color:var(--c);margin-right:5px}
+.bchip[aria-pressed="true"]{background:var(--c);color:#0c1013;border-color:var(--c)}
+.bchip[aria-pressed="true"] b{color:#0c1013}
+.bchip[disabled]{opacity:.35;cursor:not-allowed}
+.bchip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.bcard{background:var(--panel2);border-radius:8px;padding:12px 14px;border-left:4px solid var(--c,var(--accent))}
+.bcard h4{font-family:var(--f-display);font-size:16px;margin:0 0 2px}
+.bcard .meta{font-family:var(--f-mono);font-size:11.5px;color:var(--muted);margin-bottom:6px}
+.bcard p{margin:0 0 6px;font-size:13.5px}
+.bcard dl{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:6px 0 0;font-size:13px}
+.bcard dt{color:var(--muted)}
+.bcard dd{margin:0;min-width:0}
+.vlink{font:inherit;font-size:12px;background:none;border:1px solid var(--line);color:var(--accent);border-radius:999px;padding:1px 9px;margin:2px 4px 2px 0;cursor:pointer}
+
+.cagsec{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.caggrid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:0}
+@media (max-width:860px){.caggrid{grid-template-columns:minmax(0,1fr)}}
+.xray{position:relative;aspect-ratio:1/1;max-width:100%;background:#b9b9b6;overflow:hidden}
+.xray canvas{display:block;width:100%;height:100%}
+.xray::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 50%,transparent 55%,rgba(0,0,0,.55) 100%)}
+#xNoise{position:absolute;inset:0;mix-blend-mode:multiply;opacity:.35;pointer-events:none}
+#xLabels{position:absolute;inset:0;pointer-events:none;z-index:2}
+.xl{position:absolute;transform:translate(-50%,-50%);font-family:var(--f-mono);font-size:10.5px;font-weight:600;padding:0 5px;border-radius:4px;background:rgba(255,255,255,.82);color:#14181b;white-space:nowrap;border:1px solid rgba(0,0,0,.25)}
+.xo{position:absolute;z-index:3;transform:translate(-50%,-50%);font-size:11.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:rgba(14,18,21,.8);color:#ffd98f;white-space:nowrap;pointer-events:none}
+.xo.ax{color:#9fd3ff}
+.xhud{position:absolute;left:10px;top:8px;z-index:2;font-family:var(--f-mono);font-size:13px;font-weight:600;color:#111;text-shadow:0 0 3px #fff}
+.xhud small{display:block;font-size:11px;font-weight:400}
+.cagside{padding:14px 18px 18px;display:flex;flex-direction:column;gap:12px;min-width:0;border-left:1px solid var(--line)}
+@media (max-width:860px){.cagside{border-left:0;border-top:1px solid var(--line)}}
+.carm{position:relative;aspect-ratio:4/3;max-width:100%;border-radius:8px;overflow:hidden;background:radial-gradient(ellipse at 50% 40%,#1a252d 0%,#0d1216 75%)}
+.carm canvas{display:block;width:100%;height:100%}
+.carm .cap{position:absolute;left:8px;bottom:6px;font-size:11px;color:var(--muted);pointer-events:none}
+.sl{display:grid;grid-template-columns:5.5em minmax(0,1fr) 5.5em;align-items:center;gap:8px;font-size:12.5px}
+.sl input{width:100%;accent-color:var(--accent)}
+.sl output{font-family:var(--f-mono);text-align:right;color:var(--accent)}
+.seg2{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg2 button{font:inherit;font-size:13px;background:none;border:0;color:var(--muted);padding:5px 14px;cursor:pointer}
+.seg2 button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+footer{font-size:12px;color:var(--muted);max-width:90ch}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+<header>
+  <div>
+    <div class="eyebrow">TTE · 経胸壁心エコー 学習用</div>
+    <h1>心エコー断面シミュレーター</h1>
+  </div>
+  <p>断面を選ぶと、左の3D心臓にプローブと超音波の扇が現れ、右にその断面のエコー像が映ります。色分けで冠動脈の支配域、下のタブで解剖・測れる数値・見るときのコツを確認できます。</p>
+</header>
+
+<nav id="views" class="views" aria-label="断面の選択"></nav>
+
+<main class="stage">
+  <section class="pane">
+    <div class="pane-head"><span class="t">3D 心臓とプローブ</span><span class="hint">心臓の向きは固定。ドラッグで見る角度を変更</span></div>
+    <div id="three" class="three"><div id="labels3d"></div><div class="move" id="move"></div><div class="orient" id="orient">黄色の扇 = 超音波の断面 / 白 = プローブ(黄色の点がマーカー)</div></div>
+    <div class="ctrl">
+      <button class="tog" id="tCut" aria-pressed="false">断面でカット</button>
+      <button class="tog" id="tL3" aria-pressed="true">3Dラベル</button>
+      <button class="tog" id="tChest" aria-pressed="true">肋骨</button>
+      <button class="tog" id="tReset" aria-pressed="false">向きをリセット</button>
+    </div>
+  </section>
+  <section class="pane">
+    <div class="pane-head"><span class="t" id="viewName"></span><span class="hint" id="viewSub"></span></div>
+    <div class="echo-box"><canvas id="echo" aria-label="模式的なエコー断面像"></canvas></div>
+    <div class="ctrl">
+      <button class="tog" id="tLab" aria-pressed="true">解剖ラベル</button>
+      <button class="tog" id="tTer" aria-pressed="true">冠動脈支配</button>
+      <button class="tog" id="tCal" aria-pressed="false">計測ライン</button>
+      <button class="tog" id="tPlay" aria-pressed="true">拍動</button>
+    </div>
+  </section>
+</main>
+
+<section class="info">
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true" data-tab="guide" id="tab-guide">やさしい解説</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="anat" id="tab-anat">解剖</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="cor" id="tab-cor">冠動脈の支配域</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="meas" id="tab-meas">この断面で測れる数値</button>
+  </div>
+  <div class="tpanel" id="panel-guide"></div>
+  <div class="tpanel" id="panel-anat" hidden></div>
+  <div class="tpanel" id="panel-cor" hidden>
+    <div class="cor">
+      <div>
+        <canvas id="bulls" width="440" height="440" aria-label="17セグメント ブルズアイ"></canvas>
+        <div class="key"><span><i style="background:var(--lad)"></i>LAD 左前下行枝</span><span><i style="background:var(--lcx)"></i>LCX 左回旋枝</span><span><i style="background:var(--rca)"></i>RCA 右冠動脈</span></div>
+      </div>
+      <div id="corText"></div>
+    </div>
+  </div>
+  <div class="tpanel" id="panel-meas" hidden></div>
+</section>
+
+<section class="corsec" id="coronary">
+  <div class="pane-head"><span class="t">冠動脈 3D 模式図</span><span class="hint">ドラッグで回転・枝をクリックすると説明が出ます</span></div>
+  <div class="corgrid">
+    <div>
+      <div class="cor3d" id="cor3d"><div id="corLabels"></div><div id="corTip" hidden></div></div>
+      <div class="ctrl">
+        <button class="tog" id="cDomR" aria-pressed="true">右冠優位(約8割)</button>
+        <button class="tog" id="cDomL" aria-pressed="false">左冠優位(約1割)</button>
+        <button class="tog" id="cSurf" aria-pressed="true">心臓の表面</button>
+        <button class="tog" id="cNum" aria-pressed="true">AHA番号</button>
+        <button class="tog" id="cFront" aria-pressed="false">正面</button>
+        <button class="tog" id="cBack" aria-pressed="false">背面(横隔膜面)</button>
+      </div>
+    </div>
+    <div class="corside">
+      <div id="bList"></div>
+      <div class="bcard" id="bCard"></div>
+    </div>
+  </div>
+</section>
+
+<section class="cagsec" id="cag">
+  <div class="pane-head"><span class="t">冠動脈造影(CAG)シミュレーター</span><span class="hint">Cアームの角度を変えて、同じ血管がどう映るかを見比べる</span></div>
+  <div class="caggrid">
+    <div>
+      <div class="xray" id="xray"><canvas id="xNoise" width="256" height="256"></canvas><div id="xLabels"></div><div class="xhud" id="xHud"></div><div class="xo" id="xoL">患者の左</div><div class="xo" id="xoR">患者の右</div><div class="xo ax" id="xoH">頭側</div><div class="xo ax" id="xoF">足側</div></div>
+      <div class="ctrl">
+        <button class="tog" id="xFill" aria-pressed="false">造影する ▶</button>
+        <button class="tog" id="xLab" aria-pressed="true">枝の名前</button>
+        <button class="tog" id="xDepth" aria-pressed="false">奥行きカラー</button>
+        <button class="tog" id="xWob" aria-pressed="false">ゆらゆら(立体感)</button>
+        <button class="tog" id="xBone" aria-pressed="true">脊椎・横隔膜</button>
+      </div>
+    </div>
+    <div class="cagside">
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center"><span class="seg2" role="group" aria-label="造影する冠動脈"><button id="xL" aria-pressed="true">左冠動脈</button><button id="xR" aria-pressed="false">右冠動脈</button></span><span class="note" style="margin:0">カテーテルを入れる側を選びます</span></div>
+      <div class="bgroup"><span class="gl">よく使う角度</span><div class="bchips" id="xPre"></div></div>
+      <div class="sl"><label for="xA">RAO ⇄ LAO</label><input type="range" id="xA" min="-60" max="60" step="1" value="-30"><output id="xAo"></output></div>
+      <div class="sl"><label for="xC">CAU ⇄ CRA</label><input type="range" id="xC" min="-40" max="40" step="1" value="-30"><output id="xCo"></output></div>
+      <div class="carm" id="carm"><div class="cap">Cアームと患者(足元・左側から見た図)。四角い板が受像器(画像はこちら側から見た像)</div></div>
+      <div class="bcard" id="xCard" style="--c:var(--accent)"></div>
+    </div>
+  </div>
+  <div class="tpanel" style="border-top:1px solid var(--line)">
+    <h3>奥行きがわからなくなったときの手がかり</h3>
+    <div class="cols">
+      <div><h4>RAO か LAO か</h4><p>背骨(脊椎)の位置を見ます。RAO では背骨が画面の左、LAO では画面の右に寄ります。正面(AP)ではほぼ真ん中です。</p></div>
+      <div><h4>CRA か CAU か</h4><p>横隔膜のドームを見ます。CRA(頭側)では横隔膜が心臓の影に重なって上がって見え、CAU(足側)では画面の下へ離れます。</p></div>
+      <div><h4>LAD か LCx か</h4><p>LAD は心尖に向かって前室間溝を下り、途中で中隔枝(ほぼ直角の細い枝)と対角枝を出します。LCx は房室間溝に沿って心臓の裏へ回り、鈍縁枝を出します。中隔枝があるほうが LAD です。</p></div>
+      <div><h4>右冠動脈の形</h4><p>LAO では「C」の字、RAO では「L」の字に見えます。十字部で後下行枝(心尖へ下る)と房室結節枝・後側壁枝(左へ進む)に分かれます。</p></div>
+    </div>
+    <p class="note">「奥行きカラー」をオンにすると、受像器に近い血管がオレンジ、遠い血管が青で表示されます。「ゆらゆら」をオンにすると角度が少し揺れ、動き方の違いで前後関係がつかめます。手前の血管ほど大きく動きます。</p>
+  </div>
+</section>
+
+<footer>教育用の模式図です。エコー像・3D形状は分かりやすさを優先して単純化しており、実際の画像や個人差とは異なります。基準値は ASE/EACVI 心腔計測ガイドライン(2015)、拡張能評価(2016)、日本人正常値(JAMP研究)などの一般的な目安で、施設や体格によって変わります。冠動脈の支配域には個人差(右冠優位・左冠優位など)があります。</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+"use strict";
+/* ===== 17セグメントと冠動脈 ===== */
+const SEG={
+ 1:["心基部 前壁","LAD"],2:["心基部 前壁中隔","LAD"],3:["心基部 下壁中隔","RCA"],4:["心基部 下壁","RCA"],5:["心基部 下側壁","LCX"],6:["心基部 前側壁","LCX"],
+ 7:["中部 前壁","LAD"],8:["中部 前壁中隔","LAD"],9:["中部 下壁中隔","RCA","LADとRCAの境界。どちらからも灌流されうる"],10:["中部 下壁","RCA"],11:["中部 下側壁","LCX"],12:["中部 前側壁","LCX","LAD(対角枝)とLCXの境界"],
+ 13:["心尖部 前壁","LAD"],14:["心尖部 中隔","LAD"],15:["心尖部 下壁","RCA","LADが心尖を回り込む人ではLAD"],16:["心尖部 側壁","LCX","LADが灌流することも多い"],17:["心尖(アペックス)","LAD"]
+};
+const ART={LAD:{c:"#5b9dff",n:"左前下行枝 (LAD)"},LCX:{c:"#3cc9a0",n:"左回旋枝 (LCX)"},RCA:{c:"#f07a8c",n:"右冠動脈 (RCA)"}};
+
+/* ===== 断面データ ===== */
+const VIEWS=[
+{id:"plax",ab:"PLAX",name:"傍胸骨長軸像",group:"傍胸骨",sub:"胸骨左縁 第3〜4肋間・マーカーは右肩",
+ guide:{
+  lead:"最初に描出する「基本の一枚」です。左心室を縦に切って、横から眺めているイメージです。",
+  probe:"患者さんに左側臥位(左を下に横向き)になってもらい、胸骨のすぐ左、第3〜4肋間にプローブを当てます。マーカー(プローブの印)は患者さんの右肩に向けます。",
+  see:"画面の上がプローブに近い前側(胸側)、右側が心臓の根元(心基部)です。上から順に「右室 → 心室中隔 → 左室 → 後壁」と重なり、右側に大動脈、その下に左房が並びます。心尖部は画面の左外に切れるのが普通です。",
+  tips:["中隔と大動脈前壁が一直線につながり、画面に対して水平に近いのが良い断面の目安です。","僧帽弁と大動脈弁が両方くっきり見えるように、プローブを少しずつ傾けて調整します。","左房の後ろに見える小さな丸は下行大動脈です。心嚢液と胸水を見分ける目印になります(心嚢液は下行大動脈の手前に、胸水は奥に溜まります)。"]},
+ anat:[["RV","右室(右室流出路)","画面の一番上。プローブに最も近い部屋です。"],["IVS","心室中隔","右室と左室を隔てる壁。ここで厚さを測ります。"],["LV","左室","全身に血液を送り出すメインの部屋。"],["PW","左室後壁(下側壁)","中隔と向かい合う壁。厚さと動きを見ます。"],["Ao","大動脈基部","バルサルバ洞を含む大動脈の根元。"],["AV","大動脈弁","右冠尖(上)と無冠尖(下)が見えます。"],["MV","僧帽弁","前尖は大動脈後壁と線維性につながっています。"],["LA","左房","大動脈のすぐ後ろ(画面下)にあります。"],["DAo","下行大動脈","左房の奥の小さな丸。"],["CS","冠静脈洞","房室間溝の小さな丸。拡大していたら左上大静脈遺残を疑います。"]],
+ segs:[2,8,5,11],
+ cor:"前の壁(中隔)は LAD、後ろの壁(下側壁)は LCX の領域です。中隔の動きが悪ければ LAD、後壁なら LCX の虚血を考えます。",
+ meas:[["LVDd / LVDs","LVDd 男 42–58 mm・女 38–52 mm<br>LVDs 男 25–40 mm・女 22–35 mm","僧帽弁の弁尖の高さで、中隔の内側から後壁の内側まで。拡張末期(心電図のQRS)と収縮末期で測ります。","48 / 31 mm"],["IVSd・PWd","6–10 mm(11 mm 以上で肥厚)","拡張末期の壁の厚さ。左室肥大の評価に使います。","9 / 9 mm"],["FS(内径短縮率)","25–43 % 程度","(LVDd − LVDs) ÷ LVDd。左室の縮み具合の簡易指標です。","35 %"],["EF(Teichholz法)","52–72 %(男)・54–74 %(女)","内径から容積を推定する方法。局所壁運動異常があると不正確なので、心尖部像の Simpson 法を優先します。","65 %"],["Ao(バルサルバ洞径)","おおむね 37 mm 以下","拡張末期に、洞の最も広い所で測ります。大動脈弁輪拡張症のチェックに。","30 mm"],["LAD(左房径)","40 mm 未満が目安","収縮末期に大動脈の後ろで測ります。左房の大きさは容積(LAVI)の方が正確です。","36 mm"],["LVOT 径","18–25 mm 程度","収縮中期、大動脈弁輪の直下で。一回拍出量の計算(LVOT面積×VTI)に使います。","21 mm"],["相対壁厚 RWT","≤ 0.42","(2 × PWd) ÷ LVDd。求心性リモデリング・肥大の分類に使います。","0.38"]]},
+
+{id:"psax-av",ab:"PSAX-AV",name:"傍胸骨短軸像(大動脈弁レベル)",group:"傍胸骨",sub:"PLAXから時計回りに90°・やや頭側へ",
+ guide:{
+  lead:"心臓を輪切りにして、根元(大動脈弁の高さ)を見下ろす断面です。真ん中の丸い大動脈弁を、右心系がぐるりと取り囲みます。",
+  probe:"PLAXの位置からプローブを時計回りに90°回し、マーカーを患者さんの左肩に向けます。そこからプローブの先をやや頭側(右肩寄り)に傾けると大動脈弁の高さになります。",
+  see:"中央の大動脈弁が閉じると「ベンツのマーク(Y字)」に見えます。その周りを時計回りに、右房 → 三尖弁 → 右室流出路 → 肺動脈弁 → 肺動脈と右心系が取り巻き、下に左房があります。",
+  tips:["弁尖が3枚あるか(二尖弁ではないか)を必ず確認します。二尖弁では開いたときの形が楕円の「魚の口」になります。","右冠動脈は11時ごろ、左冠動脈主幹部は4時ごろから出ていきます。条件が良ければ起始部が見えます。","肺動脈の血流や三尖弁逆流の速さをドプラで測るのにも使える断面です。"]},
+ anat:[["AV","大動脈弁","RCC(右冠尖)・LCC(左冠尖)・NCC(無冠尖)の3枚。"],["RCC","右冠尖","前側(上)。ここから右冠動脈が出ます。"],["LCC","左冠尖","右側(患者の左)。ここから左冠動脈主幹部が出ます。"],["NCC","無冠尖","左下、心房中隔の近く。冠動脈は出ません。"],["RA","右房","左下。"],["TV","三尖弁","右房と右室の間。"],["RVOT","右室流出路","大動脈弁の前を回り込む右室の出口。"],["PV","肺動脈弁","右室流出路の出口。"],["PA","主肺動脈","右下へ向かい、左右に分かれます。"],["LA","左房","大動脈弁の後ろ(下)。"],["IAS","心房中隔","右房と左房の間。"],["LM / RCA","冠動脈起始部","LMは4時、RCAは11時方向。"]],
+ segs:[],
+ cor:"この高さはまだ心筋の17セグメントより上です。そのかわり、冠動脈が大動脈から出ていく根元(左冠動脈主幹部と右冠動脈の起始部)を観察できます。冠動脈起始異常のスクリーニングに役立ちます。",
+ meas:[["大動脈弁の形態","3尖・開放良好","二尖弁、石灰化、開放制限がないかを目で見て評価します。","3尖"],["主肺動脈径","25 mm 未満","肺動脈弁の少し先で測ります。拡大は肺高血圧のサイン。","21 mm"],["TR 最大流速(TRV)","≤ 2.8 m/s","三尖弁逆流を連続波ドプラで。推定右室収縮期圧 = 4 × V² + 右房圧。","2.3 m/s"],["肺動脈の加速時間(AcT)","> 130 ms 程度","右室流出路のパルスドプラ。短いほど肺高血圧を疑います。","140 ms"],["Qp/Qs","≈ 1.0","肺血流量 ÷ 体血流量。1.5以上なら有意な左→右シャントを疑います。","1.0"],["RVOT 径","近位 ≤ 35 mm 程度","大動脈弁の前を回る部分で測ります。","28 mm"]]},
+
+{id:"psax-mv",ab:"PSAX-MV",name:"傍胸骨短軸像(僧帽弁レベル)",group:"傍胸骨",sub:"大動脈弁レベルから少し心尖側へ",
+ guide:{
+  lead:"左室の根元の輪切りです。僧帽弁が開閉する様子が「魚の口(フィッシュマウス)」のように見えます。",
+  probe:"短軸像のままプローブの先を少しずつ心尖側(患者さんの左下)へ傾けると、大動脈弁が消えて僧帽弁の口が現れます。",
+  see:"真ん中の丸が左室、左上に三日月形の右室が寄り添います。左室の中で、前尖(上)と後尖(下)が拡張期に大きく開き、収縮期に一本の線になります。",
+  tips:["左室がまん丸に見えていれば、断面が斜めになっていない証拠です。楕円になっていたらプローブの傾きを直します。","僧帽弁狭窄症では、弁口の一番狭い所を探してトレースし、弁口面積を直接測ります(プラニメトリ法)。","心基部の6つのセグメントの動きを一度に見られます。"]},
+ anat:[["LV","左室(心基部)","真ん中の丸。"],["RV","右室","左上の三日月。"],["IVS","心室中隔","左室と右室の境界。"],["AML","僧帽弁前尖","上側の弁尖。大きく動きます。"],["PML","僧帽弁後尖","下側の弁尖。"],["MO","僧帽弁口","拡張期に開く口。"]],
+ segs:[1,2,3,4,5,6],
+ cor:"時計の文字盤のように見ると覚えやすいです。上(前壁)と左上(前壁中隔)が LAD、左下(下壁中隔)と下(下壁)が RCA、右下(下側壁)と右上(前側壁)が LCX です。",
+ meas:[["僧帽弁口面積 MVA","4–6 cm²(正常)<br>≤ 1.5 cm² で高度狭窄","拡張早期、弁口の最も狭い所をトレース(プラニメトリ法)。","4.5 cm²"],["壁運動(心基部6区域)","全周性に均一な収縮","各セグメントを「正常・低収縮・無収縮・奇異性運動」で評価します。","正常"],["弁の性状","肥厚・石灰化なし","リウマチ性変化(交連部の癒合)や逸脱の有無を見ます。","正常"]]},
+
+{id:"psax-pm",ab:"PSAX-PM",name:"傍胸骨短軸像(乳頭筋レベル)",group:"傍胸骨",sub:"さらに心尖側へ",
+ guide:{
+  lead:"左室の真ん中あたりの輪切りです。左室の動きを評価するのに最もよく使われる断面で、3本の冠動脈の領域がすべて1枚に入ります。",
+  probe:"僧帽弁レベルからさらに心尖側へプローブを傾けます。左室の中に、乳頭筋が2つの丸いこぶとして見えたらこの高さです。",
+  see:"左室の中、4時ごろに前外側乳頭筋、8時ごろに後内側乳頭筋が見えます。収縮期には壁が厚くなりながら、真ん中に向かって均等に縮みます。",
+  tips:["壁の「内側への動き」と「厚くなること」の両方を見ます。厚くならない壁は虚血の可能性があります。","左室がD字型(中隔が平らに押される)に見えたら、右室の圧や容量の負荷を疑います。","後内側乳頭筋は血流が1本(多くはRCA)だけなので、心筋梗塞で断裂しやすいことが知られています。"]},
+ anat:[["LV","左室(中部)","真ん中の丸。"],["RV","右室","左上の三日月。"],["IVS","心室中隔","左室と右室の境界。"],["ALPM","前外側乳頭筋","4時方向。LADとLCXの二重支配。"],["PMPM","後内側乳頭筋","8時方向。多くはRCA(またはLCX)の単独支配。"]],
+ segs:[7,8,9,10,11,12],
+ cor:"中部6区域が並びます。1枚でLAD・LCX・RCAすべての領域を見比べられるので、虚血の評価で最も頼りになる断面です。下壁中隔(9)と前側壁(12)は境界領域で、どちらの枝が灌流するかに個人差があります。",
+ meas:[["壁運動スコア(WMS)","1 = 正常","各セグメントを 1 正常・2 低収縮・3 無収縮・4 奇異性運動 で点数化し、平均したものが WMSI です。","1.0"],["FS(短縮率)","25–43 % 程度","乳頭筋レベルでも内径から計算できます。","35 %"],["偏心指数 Eccentricity index","≈ 1.0","左室の前後径 ÷ 中隔-側壁径。1より大きいとD字型(右室負荷)を示します。","1.0"],["左室心筋重量係数 LVMI","男 ≤ 115 g/m²・女 ≤ 95 g/m²","PLAXの計測(Devereux式)から計算するのが一般的です。","82 g/m²"]]},
+
+{id:"psax-ap",ab:"PSAX-Apex",name:"傍胸骨短軸像(心尖部レベル)",group:"傍胸骨",sub:"肋間を1つ下げて心尖側へ",
+ guide:{
+  lead:"左室の先端近くの輪切りです。小さな丸になり、心尖部の4セグメントを見ます。",
+  probe:"乳頭筋レベルからさらに傾けるか、1肋間下げて同じ向きで当てます。乳頭筋が消え、左室が小さな丸になります。",
+  see:"小さな左室の輪だけが見え、右室はほとんど映りません。心尖部の壁運動異常(LADの梗塞など)を見逃さないための断面です。",
+  tips:["心尖部は前胸壁に近く、短軸像だと斜めに切れやすい部分です。心尖部像(四腔・二腔・長軸)と合わせて評価します。","心尖部に血栓がないか、壁が薄く膨らんでいないか(心室瘤)も確認します。"]},
+ anat:[["LV","左室(心尖部)","小さな丸。"],["RV","右室","ほとんど見えません。"]],
+ segs:[13,14,15,16],
+ cor:"心尖部の4区域です。前壁(13)と中隔(14)は LAD。下壁(15)・側壁(16)も、LADが心尖を回り込む人では LAD が灌流します。心尖部の広い壁運動異常は LAD の病変を強く示唆します。",
+ meas:[["心尖部の壁運動","均一な収縮","4区域それぞれの動きと厚さの変化を見ます。","正常"],["心尖部血栓","なし","壁運動が悪い心尖部では、カラードプラやコントラストで丁寧に探します。","なし"]]},
+
+{id:"a4c",ab:"A4C",name:"心尖部四腔像",group:"心尖部",sub:"心尖拍動の位置・マーカーは左(3時)",
+ guide:{
+  lead:"4つの部屋を一度に見渡せる、とても大事な断面です。心臓の先端(心尖)から根元を見上げるイメージです。",
+  probe:"左側臥位のまま、心尖拍動を触れる位置(多くは第5肋間・鎖骨中線付近)にプローブを置き、ビームを右肩に向けます。マーカーは患者さんの左側(3時方向)に。",
+  see:"画面の上が心尖です。右側に左室と左房、左側に右室と右房。真ん中を縦に中隔が走ります。左房には肺静脈が入り、左房の奥に下行大動脈の丸が見えることもあります。",
+  tips:["心尖が画面の真上にあり、左室がしっかり縦長に見える(短く見えない)ことが大切です。短く写る「フォアショートニング」は容積の過小評価につながります。","左室は砲弾型で心尖まで届き、右室は三角形で心尖の手前で終わります。右室の心尖寄りを横切る調節帯(MB)と、ごつごつした肉柱が右室の目印です。","三尖弁は僧帽弁より少し心尖寄りについています。この少しのずれ(数mm)が正常のしるしで、ずれが大きすぎるとエプスタイン奇形を疑います。","プローブを少し前に傾けると大動脈が現れ、心尖部五腔像になります。"]},
+ anat:[["LV","左室","画面右。縦長の砲弾型。"],["RV","右室","画面左。左室より小さく三角形。"],["LA","左房","右下。肺静脈が入ります。"],["RA","右房","左下。"],["IVS","心室中隔","下壁中隔〜心尖部中隔。"],["IAS","心房中隔","左房と右房の間。"],["MV","僧帽弁","左房と左室の間。"],["TV","三尖弁","僧帽弁より少し心尖側。"],["PV","肺静脈","左房の奥に入る血管。"],["DAo","下行大動脈","左房の奥の丸。"],["MB","調節帯(モデレーターバンド)","右室の心尖寄りを横切る筋の束。右室だと分かる目印で、血栓や腫瘍と間違えないようにします。"],["ALPM","前外側乳頭筋","左室側壁から伸び、腱索(細い糸)で僧帽弁につながっています。"],["FO","卵円窩","心房中隔の薄い部分。この断面ではエコーが抜けて穴のように見えることがあり、心房中隔欠損と見誤らないよう注意します。"]],
+ segs:[3,9,14,17,16,12,6],
+ cor:"中隔側(画面中央)は下壁中隔(基部・中部)が RCA、心尖部中隔が LAD。外側の壁(画面右)は前側壁で LCX が中心です。心尖(17)は LAD です。右室の自由壁は RCA の枝(右室枝)が灌流します。",
+ meas:[["LVEF(Simpson法 biplane)","男 52–72 %・女 54–74 %","四腔像と二腔像で、拡張末期・収縮末期の内膜をトレースして容積から計算します。","62 %"],["LVEDV / LVESV(係数)","EDVI 男 ≤ 74・女 ≤ 61 mL/m²","同じくSimpson法で。体表面積で割って評価します。","58 / 22 mL/m²"],["E/A・DT","E/A 0.8–2(年齢で変化)<br>DT 160–240 ms","僧帽弁先端でパルスドプラ。拡張早期(E)と心房収縮(A)の流入速度。","1.3 / 190 ms"],["e′・E/e′","中隔 e′ ≥ 7・側壁 e′ ≥ 10 cm/s<br>平均 E/e′ ≤ 14","僧帽弁輪の組織ドプラ。E/e′ が高いと左室の充満圧が高いことを示します。","9 / 12 cm/s・7"],["LAVI(左房容積係数)","≤ 34 mL/m²","収縮末期に四腔・二腔像の左房をトレース(biplane)。拡張障害の大事な指標です。","28 mL/m²"],["TAPSE","≥ 17 mm","三尖弁輪の側壁側にMモードを当て、心尖方向への移動距離を測ります。右室機能の指標。","22 mm"],["右室 基部径","≤ 41 mm","右室に焦点を合わせた四腔像で、拡張末期の基部で。","34 mm"],["TR 最大流速","≤ 2.8 m/s","三尖弁逆流を連続波ドプラで。肺高血圧の推定に使います。","2.3 m/s"],["GLS(左室長軸ストレイン)","約 −20 %(絶対値が18%未満なら低下を疑う)","スペックルトラッキングで解析。EFが保たれていても早期の機能低下を捉えます。","−21 %"]]},
+
+{id:"a2c",ab:"A2C",name:"心尖部二腔像",group:"心尖部",sub:"四腔像から反時計回りに約60°",
+ guide:{
+  lead:"左室と左房の2部屋だけが見える断面です。四腔像では見えない前壁と下壁を観察します。",
+  probe:"四腔像の位置のまま、プローブを反時計回りに約60°回します。右室と右房が画面から消え、左側の部屋だけが残ればOKです。",
+  see:"画面の左が下壁、右が前壁です。左房の右上に、左心耳が小さな袋として見えることがあります。左下には冠静脈洞の小さな丸が見えます。",
+  tips:["右室が少しでも映っていたら、まだ回し足りないサインです。","四腔像とこの二腔像を組み合わせて、Simpson法(biplane)で左室EFや左房容積を求めます。","下壁(RCA)と前壁(LAD)が向かい合うので、梗塞の場所の比較に便利です。"]},
+ anat:[["LV","左室","縦長の砲弾型。"],["LA","左房","下側。"],["LAA","左心耳","左房の右上の小さな袋。血栓ができやすい場所。"],["MV","僧帽弁","左房と左室の間。"],["CS","冠静脈洞","左下の小さな丸。"],["Inf","下壁","画面左側の壁。"],["Ant","前壁","画面右側の壁。"]],
+ segs:[4,10,15,17,13,7,1],
+ cor:"画面左の下壁(基部・中部・心尖部)は RCA、右の前壁(基部・中部・心尖部)は LAD。心尖部下壁(15)は LAD が回り込んで灌流することもあります。",
+ meas:[["LVEF(Simpson法 biplane)","男 52–72 %・女 54–74 %","四腔像と合わせてトレース。","62 %"],["LAVI(biplane)","≤ 34 mL/m²","四腔像と合わせて左房をトレース。","28 mL/m²"],["前壁・下壁の壁運動","均一な収縮","LAD と RCA の領域を比較します。","正常"]]},
+
+{id:"a3c",ab:"A3C",name:"心尖部長軸像(三腔像)",group:"心尖部",sub:"二腔像からさらに反時計回りに約60°",
+ guide:{
+  lead:"PLAXを心尖側から見直したような断面で、左室・左房・大動脈の3つが見えます。大動脈弁を通る血流の速さを測るのに欠かせません。",
+  probe:"二腔像からさらに反時計回りに約60°回し、マーカーを患者さんの右肩方向へ。画面右下に大動脈が現れます。",
+  see:"画面の左が下側壁、右が前壁中隔です。右下に大動脈、左下に左房があり、僧帽弁と大動脈弁が隣り合っています。",
+  tips:["ビームと血流の向きがそろうので、大動脈弁狭窄症の重症度(最大流速・平均圧較差)を正確に測れます。","左室流出路でパルスドプラを取ると、1回拍出量(LVOT VTI)が分かります。","閉塞性肥大型心筋症では、流出路で速い血流と僧帽弁の前方運動(SAM)を探します。"]},
+ anat:[["LV","左室","縦長の砲弾型。"],["LA","左房","左下。"],["Ao","大動脈","右下へ伸びる管。"],["LVOT","左室流出路","大動脈弁の手前の通り道。"],["AV","大動脈弁","大動脈の入口。"],["MV","僧帽弁","左房と左室の間。前尖は大動脈とつながっています。"]],
+ segs:[5,11,16,17,14,8,2],
+ cor:"画面右の前壁中隔は LAD、左の下側壁は LCX の領域です。PLAXで見える壁と同じ組み合わせを、心尖部まで含めて見られます。",
+ meas:[["大動脈弁 最大流速(AV Vmax)","< 2.5 m/s(正常)<br>≥ 4.0 m/s で高度狭窄","大動脈弁を通る血流を連続波ドプラで。","1.2 m/s"],["平均圧較差(mean PG)","高度狭窄 ≥ 40 mmHg","ドプラ波形をトレースして求めます。","3 mmHg"],["大動脈弁口面積 AVA","3–4 cm²(正常)<br>< 1.0 cm² で高度狭窄","連続の式:LVOT面積 × LVOT VTI ÷ AV VTI。","3.2 cm²"],["LVOT VTI","18–22 cm","弁の約5 mm手前でパルスドプラ。1回拍出量 = LVOT面積 × VTI。","20 cm"],["1回拍出量 SV","60–100 mL 程度","LVOT径(PLAX)と VTI から計算。","70 mL"],["LVOT 圧較差(HCM)","安静時 < 30 mmHg","流出路の加速血流を連続波ドプラで。","—"]]},
+
+{id:"ivc",ab:"SC-IVC",name:"心窩部 下大静脈長軸像",group:"心窩部",sub:"剣状突起の下・マーカーは頭側",
+ guide:{
+  lead:"みぞおちから、肝臓越しに下大静脈(IVC)が右房に入るところを見ます。体の「水分量」と右房圧を推定するための断面です。",
+  probe:"仰臥位で膝を立ててお腹の力を抜いてもらい、剣状突起のすぐ下にプローブを置きます。マーカーを頭側に向け、ビームをやや右(患者さんの右)に向けます。",
+  see:"画面上の大きな灰色の組織は肝臓です。その中を太い黒い管(IVC)が横に走り、右側で右房に入ります。途中で肝静脈が合流します。",
+  tips:["右房との合流部から1〜2 cm 手前で直径を測ります。","鼻をすする(sniff)ように軽く吸ってもらうと、正常ではIVCがぺしゃんこに近くなります。","腹部大動脈と間違えないように。大動脈は拍動し、右房には入りません。"]},
+ anat:[["Liver","肝臓","画面上半分の組織。音響窓になります。"],["IVC","下大静脈","横に走る黒い管。呼吸で太さが変わります。"],["HV","肝静脈","上からIVCに合流。"],["RA","右房","画面右。IVCの行き先。"]],
+ segs:[],
+ cor:"この断面では心筋のセグメントは評価しません。右心系への戻り(静脈還流)と右房圧を見る断面です。",
+ meas:[["IVC 径","≤ 21 mm","呼気時、右房合流部から1〜2 cm 手前で。","17 mm"],["呼吸性変動(虚脱率)","> 50 %(sniff時)","(最大径 − 最小径) ÷ 最大径。","59 %"],["推定右房圧 RAP","径 ≤ 21 mm かつ 虚脱 > 50 % → 3 mmHg<br>径 > 21 mm かつ 虚脱 < 50 % → 15 mmHg<br>それ以外 → 8 mmHg","TR流速から右室収縮期圧を出すときに足し合わせます。","3 mmHg"]]}
+];
+
+/* ===== エコー画像エンジン(座標はすべて mm:x=横、d=プローブからの深さ) ===== */
+const LW=680, FH=540, LH=610, APX=340, APY=18, S=3.2, DEPTH=160, HA=42*Math.PI/180;
+const G={BG:62,DARK:30,MYO:128,FAT:150,BRIGHT:225,BLOOD:5,LIVER:96,CHEST:112};
+const gray=v=>`rgb(${v},${v},${v})`;
+const lerp=(a,b,t)=>a+(b-a)*t, clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const lerpP=(p,q,t)=>[lerp(p[0],q[0],t),lerp(p[1],q[1],t)];
+const norm=v=>{const l=Math.hypot(v[0],v[1])||1;return[v[0]/l,v[1]/l]};
+
+function fillPoly(g,pts,v){g.beginPath();pts.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]));g.closePath();g.fillStyle=gray(v);g.fill()}
+function ell(g,x,d,rx,ry,v,rot=0){g.beginPath();g.ellipse(x,d,Math.max(.1,rx),Math.max(.1,ry),rot,0,Math.PI*2);g.fillStyle=gray(v);g.fill()}
+function stroke(g,pts,w,v,cap="round"){g.beginPath();pts.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]));g.lineWidth=w;g.lineCap=cap;g.lineJoin="round";g.strokeStyle=gray(v);g.stroke()}
+function arcStroke(g,x,d,r,a0,a1,w,v){g.beginPath();g.arc(x,d,r,a0,a1);g.lineWidth=w;g.lineCap="butt";g.strokeStyle=gray(v);g.stroke()}
+/* 心尖部像の左室・右室:砲弾形の内膜ライン。t=0 左の弁輪 → 0.5 心尖 → 1 右の弁輪 */
+function U(cx,base,a,L,p=.55){return t=>{const th=Math.PI*t;return[cx-a*Math.cos(th),base-L*Math.pow(Math.sin(th),p)]}}
+function samp(fn,t0,t1,n=24){const r=[];for(let i=0;i<=n;i++)r.push(fn(lerp(t0,t1,i/n)));return r}
+/* 輪郭を外側(進行方向の左手)へ w(t) mm ずらす */
+function off(fn,wf){return t=>{const e=.002,a=fn(clamp(t-e,0,1)),b=fn(clamp(t+e,0,1)),p=fn(t),n=norm([b[1]-a[1],-(b[0]-a[0])]),w=wf(t);return[p[0]+n[0]*w,p[1]+n[1]*w]}}
+/* 制御点を滑らかにつなぐ(Catmull-Rom) */
+function spline(P){return t=>{const n=P.length-1,f=clamp(t,0,1)*n,i=Math.min(n-1,Math.floor(f)),u=f-i,p0=P[Math.max(0,i-1)],p1=P[i],p2=P[i+1],p3=P[Math.min(n,i+2)];
+  const k=(a,b,c,d)=>.5*(2*b+(-a+c)*u+(2*a-5*b+4*c-d)*u*u+(-a+3*b-3*c+d)*u*u*u);return[k(p0[0],p1[0],p2[0],p3[0]),k(p0[1],p1[1],p2[1],p3[1])]}}
+function band(fi,fo,t0,t1){return samp(fi,t0,t1,14).concat(samp(fo,t1,t0,14))}
+function sector(cx,cy,r1,r2,a0,a1){const r=[],n=16;for(let i=0;i<=n;i++){const a=lerp(a0,a1,i/n);r.push([cx+r1*Math.cos(a),cy+r1*Math.sin(a)])}for(let i=n;i>=0;i--){const a=lerp(a0,a1,i/n);r.push([cx+r2*Math.cos(a),cy+r2*Math.sin(a)])}return r}
+/* 弁:ヒンジ2点、閉鎖時の合わさる点、開放方向、開き具合 o(0〜1) */
+function valve(g,h1,h2,C,d1,d2,o,w=1.5,v=G.BRIGHT){
+  const tips=[];
+  for(const [h,d] of [[h1,d1],[h2,d2]]){const len=Math.hypot(C[0]-h[0],C[1]-h[1]);const open=[h[0]+d[0]*len,h[1]+d[1]*len];const tip=lerpP(C,open,o);let mid=lerpP(h,tip,.5);{const t=[tip[0]-h[0],tip[1]-h[1]],L=Math.hypot(...t)||1;let n=[-t[1]/L,t[0]/L];if(n[0]*(mid[0]-C[0])+n[1]*(mid[1]-C[1])<0)n=[-n[0],-n[1]];mid=[mid[0]+n[0]*L*.1*o,mid[1]+n[1]*L*.1*o]}stroke(g,[h,mid,tip],w,v);tips.push(tip)}
+  return tips;
+}
+const deg=a=>a*Math.PI/180;
+
+/* 心周期:φ 0〜1。c=収縮の強さ、mo=僧帽弁/三尖弁の開き、ao=大動脈弁/肺動脈弁の開き */
+function cycle(ph){
+  let c=0; if(ph<.32)c=Math.sin(Math.PI/2*ph/.32); else if(ph<.5)c=Math.cos(Math.PI/2*(ph-.32)/.18);
+  c=c*c*(3-2*c);
+  let ao=0; if(ph>.05&&ph<.31)ao=Math.min(1,Math.sin(Math.PI*(ph-.05)/.26)*1.6);
+  let mo=0; if(ph>.5&&ph<.74)mo=Math.min(1,Math.sin(Math.PI*(ph-.5)/.24)*1.5); else if(ph>=.74&&ph<.82)mo=.3; else if(ph>=.82&&ph<.97)mo=Math.max(.3,Math.sin(Math.PI*(ph-.82)/.15)*.85);
+  return{c,ao:Math.max(0,ao),mo:Math.max(0,mo)};
+}
+function ecgAt(ph){
+  let u=ph+.03; u-=Math.round(u);
+  const gs=(x,m,s)=>Math.exp(-((x-m)**2)/(2*s*s));
+  return 1*gs(u,0,.009)-.14*gs(u,-.02,.006)-.26*gs(u,.02,.007)+.28*gs(u,.3,.045)+.12*gs(u,-.16,.025);
+}
+
+/* スペックル(粒状のノイズ)とセクター形状をあらかじめ作る */
+const mapC=document.createElement("canvas");mapC.width=LW;mapC.height=FH;
+const mctx=mapC.getContext("2d",{willReadFrequently:true});
+const outC=document.createElement("canvas");outC.width=LW;outC.height=FH;
+const octx=outC.getContext("2d");
+const N=LW*FH, fanMask=new Float32Array(N), depthGain=new Float32Array(N);
+function speckle(seed){
+  let s=seed; const rnd=()=>{s=(s*16807)%2147483647;return s/2147483647};
+  const a=new Float32Array(N); for(let i=0;i<N;i++){const r=rnd();a[i]=r*r*1.6}
+  const b=new Float32Array(N);
+  for(let y=0;y<FH;y++){let acc=0;const o=y*LW;for(let x=0;x<LW;x++){acc+=a[o+x];if(x>=7)acc-=a[o+x-7];b[o+x]=acc/7}}
+  for(let y=1;y<FH-1;y++){const o=y*LW;for(let x=0;x<LW;x++)a[o+x]=(b[o+x-LW]+b[o+x]*2+b[o+x+LW])/4}
+  return a;
+}
+const SP1=speckle(1234567), SP2=speckle(7654321);
+for(let y=0;y<FH;y++)for(let x=0;x<LW;x++){
+  const dx=x-APX,dy=y-APY,r=Math.hypot(dx,dy),ang=Math.atan2(dx,dy);
+  const i=y*LW+x;
+  const edgeA=clamp((HA-Math.abs(ang))*180/Math.PI/1.2,0,1), edgeR=clamp((DEPTH*S-r)/4,0,1);
+  fanMask[i]=dy>0?edgeA*edgeR:0;
+  const dm=r/S; depthGain[i]=(1.05-.38*dm/DEPTH)*(dm<6?1.5:1);
+}
+const fanPath=new Path2D();fanPath.moveTo(APX,APY);fanPath.arc(APX,APY,DEPTH*S,Math.PI/2-HA,Math.PI/2+HA,false);fanPath.closePath();
+
+/* ===== 各断面のジオメトリ ===== */
+function chest(g){fillPoly(g,[[-200,0],[200,0],[200,14],[-200,14]],G.CHEST);stroke(g,[[-200,14],[200,14]],1.4,175);stroke(g,[[-200,6],[200,6]],1,150)}
+function hband(f1,f2,x0,x1){const a=[],b=[];for(let i=0;i<=8;i++){const x=lerp(x0,x1,i/8);a.push([x,f1(x)]);b.push([x,f2(x)])}return a.concat(b.reverse())}
+const cal=(a,b,n)=>({a,b,n});
+
+function bPLAX(st){
+  const {c,mo,ao}=st;
+  const k=x=>x<0?1:Math.max(0,1-x/34);
+  const rvB=()=>45+2*c, lvT=x=>54+8*c*k(x), lvB=x=>102-9*c*k(x), pwE=()=>111-3*c;
+  const xs=[-200,-120,-60,-20,0,12,24,34];
+  return{
+    draw(g){
+      chest(g);
+      fillPoly(g,[[-200,116],[200,116],[200,220],[-200,220]],G.DARK);
+      fillPoly(g,[[-200,104],[32,104],[32,118],[-200,118]],G.FAT);
+      fillPoly(g,[[-200,18],[200,18],[200,86],[32,86],[32,pwE()],[-200,pwE()]],G.MYO);
+      ell(g,66,104,33,21,G.MYO);
+      stroke(g,[[-200,115.5],[22,115.5],[46,128],[200,128]],3.2,G.BRIGHT);
+      ell(g,54,140,11,11,175);ell(g,54,140,8.5,8.5,G.BLOOD);
+      fillPoly(g,[[-200,27],[200,27],[200,47],[38,47],[30,rvB()],[-200,rvB()]],G.BLOOD);
+      fillPoly(g,xs.map(x=>[x,lvT(x)]).concat([[38,51],[48,50],[68,50],[85,53],[200,53],[200,77],[85,78],[68,80],[48,80],[38,81]]).concat(xs.map(x=>[x,lvB(x)]).reverse()),G.BLOOD);
+      ell(g,66,104,30,18,G.BLOOD);
+      ell(g,37,110,3.5,3.5,G.BLOOD);
+      valve(g,[37,82],[35,103],[27,95],norm([-.85,-.53]),norm([-1,-.08]),mo,1.6);
+      valve(g,[42,51],[42,80],[50,65.5],[1,.04],[1,-.04],ao,1.3);
+    },
+    segs:[{id:8,poly:hband(rvB,lvT,-70,-8)},{id:2,poly:hband(rvB,lvT,-8,30)},{id:11,poly:hband(lvB,pwE,-80,-8)},{id:5,poly:hband(lvB,pwE,-8,30)}],
+    labels:[["RV",-5,36],["IVS",-36,50],["LV",-30,78],["PW",-42,108],["Ao",80,62],["AV",56,72],["MV",16,86],["LA",76,108],["DAo",54,140],["CS",37,110]],
+    cal:[cal([8,rvB()],[8,lvT(8)],"IVS"),cal([8,lvT(8)],[8,lvB(8)],"LVD"),cal([8,lvB(8)],[8,pwE()],"PW"),cal([60,50],[60,80],"Ao"),cal([80,86],[80,122],"LA")]
+  };
+}
+
+function bPSAX(st,o){
+  const {c,mo}=st, r=o.r*(1-.33*c), w=o.w*(1+.5*c), {cx,cy}=o;
+  const angs6=[[-120,-60],[-180,-120],[120,180],[60,120],[0,60],[-60,0]], angs4=[[-135,-45],[135,225],[45,135],[-45,45]];
+  const A=o.segs.length===6?angs6:angs4;
+  const pms=[[30,"ALPM"],[150,"PMPM"]];
+  const P=(a,rr)=>[cx+rr*Math.cos(deg(a)),cy+rr*Math.sin(deg(a))];
+  const lab=[["LV",...P(-60,r*.55)],["IVS",...P(200,o.r+o.w/2)]];
+  if(o.rv)lab.push(["RV",o.rv[0]-o.rv[2]*.55,o.rv[1]-2]);
+  if(o.pm)pms.forEach(([a,n])=>lab.push([n,...P(a,o.r-14)]));
+  if(o.mv){lab.push(["AML",cx,cy-8],["PML",cx,cy+14])}
+  return{
+    draw(g){
+      chest(g);
+      if(o.rv){const[x,y,rx,ry,rot]=o.rv;ell(g,x,y,rx+4,ry+4,G.MYO,rot);ell(g,x,y,rx*(1-.15*c),ry*(1-.15*c),G.BLOOD,rot)}
+      ell(g,cx,cy,r+w,r+w,G.MYO);
+      arcStroke(g,cx,cy,o.r+o.w+5,deg(10),deg(170),3,G.BRIGHT);
+      ell(g,cx,cy,r,r,G.BLOOD);
+      if(o.pm)pms.forEach(([a])=>{const p=P(a,r-3);ell(g,p[0],p[1],5.5*(1+.15*c),5.5*(1+.15*c),G.MYO)});
+      if(o.mv){g.beginPath();g.ellipse(cx,cy+3,16*(1-.2*c),Math.max(.3,9*mo),0,0,Math.PI*2);g.lineWidth=2.2;g.strokeStyle=gray(G.BRIGHT);g.stroke()}
+    },
+    segs:o.segs.map((id,i)=>({id,poly:sector(cx,cy,r,r+w,deg(A[i][0]),deg(A[i][1]))})),
+    labels:lab,
+    cal:[cal([cx,cy-r],[cx,cy+r],"LV径")]
+  };
+}
+
+function bAV(st){
+  const {c,mo,ao}=st, cx=0, cy=74;
+  const P=(a,rr)=>[cx+rr*Math.cos(deg(a)),cy+rr*Math.sin(deg(a))];
+  const pa=[P(352,28),[33,92],[36,124]];
+  const LM=[P(18,13.5),P(18,31)], RCA=[P(228,14),P(228,24)];
+  return{
+    draw(g){
+      chest(g);
+      ell(g,0,88,64,48,108);
+      arcStroke(g,cx,cy,28,deg(160),deg(352),23,G.MYO);stroke(g,pa,23,G.MYO,"butt");
+      ell(g,-37,94,21,20,G.MYO);ell(g,4,109,31,17,G.MYO);
+      arcStroke(g,cx,cy,28,deg(162),deg(353),17,G.BLOOD);stroke(g,pa,17,G.BLOOD,"butt");
+      ell(g,-37,94,18*(1+.05*c),17*(1+.05*c),G.BLOOD);ell(g,4,109,28*(1+.05*c),14*(1+.05*c),G.BLOOD);
+      stroke(g,LM,3.6,G.BLOOD);stroke(g,RCA,3,G.BLOOD);
+      ell(g,cx,cy,15,15,170);ell(g,cx,cy,12.5,12.5,G.BLOOD);
+      const com=[210,330,450];g.lineWidth=1.3;g.strokeStyle=gray(G.BRIGHT);g.lineCap="round";
+      for(let i=0;i<3;i++){const a0=com[i],a1=com[(i+1)%3]+(i==2?360:0),mid=(a0+a1)/2;const p0=P(a0,12.5),p1=P(a1,12.5),q=lerpP([cx,cy],P(mid,10.5),ao*.9);g.beginPath();g.moveTo(p0[0],p0[1]);g.quadraticCurveTo(q[0],q[1],p1[0],p1[1]);g.stroke()}
+      valve(g,[-50,84],[-26,90],[-38,82],norm([-.15,-1]),norm([.2,-1]),mo,1.3);
+      valve(g,P(350,19.5),P(350,36.5),[28,73],norm([.1,1]),norm([.1,1]),ao,1.2);
+    },
+    segs:[{art:"LAD",line:LM,ab:"LM"},{art:"RCA",line:RCA,ab:"RCA"}],
+    labels:[["RCC",0,67],["LCC",8,79],["NCC",-8,79],["RA",-42,98],["TV",-38,78],["RVOT",-4,48],["PV",31,62],["PA",36,110],["LA",8,112],["IAS",-17,102],["LM",31,86],["RCA",-24,60]],
+    cal:[cal(P(180,12.5),P(0,12.5),"弁輪")]
+  };
+}
+
+function bIVC(st){
+  const insp=st.insp, w=17*(1-.6*insp), hw=8*(1-.3*insp);
+  const cl=[[-150,98],[-60,94],[0,88],[30,82],[40,74]], hv=[[-30,18],[-18,60],[-8,87]];
+  return{
+    draw(g){
+      fillPoly(g,[[-200,0],[200,0],[200,10],[-200,10]],G.CHEST);stroke(g,[[-200,10],[200,10]],1.4,180);
+      fillPoly(g,[[-200,10],[200,10],[200,136],[-200,136]],G.LIVER);
+      fillPoly(g,[[-200,136],[200,136],[200,220],[-200,220]],G.DARK);
+      fillPoly(g,[[24,10],[200,10],[200,140],[28,140]],84);
+      stroke(g,[[20,10],[28,50],[32,90],[28,140]],3,G.BRIGHT);
+      ell(g,52,70,26,24,G.MYO);ell(g,52,70,23*(1-.08*st.c),23*(1-.08*st.c),G.BLOOD);
+      stroke(g,hv,hw+2.6,165);stroke(g,cl,w+3,165,"butt");
+      stroke(g,hv,hw,G.BLOOD);stroke(g,cl,w,G.BLOOD,"butt");
+    },
+    segs:[],
+    labels:[["Liver",-62,40],["IVC",-80,95],["HV",-30,40],["RA",54,66]],
+    cal:[cal([10,86-w/2],[10,86+w/2],"IVC")]
+  };
+}
+
+/* 心房:弁輪の両端からぶら下がる、中部がふくらんだ袋 */
+function atrium(A,h1,h2){const top=(h1[1]+h2[1])/2+1,dep=A.ry*2,cx=A.x;
+  return spline([h1,[cx-A.rx*.95,top+dep*.22],[cx-A.rx,top+dep*.55],[cx-A.rx*.7,top+dep*.88],[cx,top+dep],[cx+A.rx*.7,top+dep*.88],[cx+A.rx,top+dep*.55],[cx+A.rx*.95,top+dep*.22],h2])}
+/* 心尖部像の共通ビルダー */
+function bApical(st,o){
+  const {c,mo,ao}=st, L=o.lv, lb=L.base-9*c, w=9+4*c, aL=L.a*(1-.3*c), LL=L.L-13*c;
+  /* 心尖部の壁は生理的に薄い */
+  const wf=t=>w*(1-.38*Math.exp(-(((t-.5)/.09)**2)));
+  /* 左室は弁輪がややすぼまり、中部〜基部で最も太い砲弾型 */
+  const LVP=[[-.84,0],[-.98,.18],[-1,.38],[-.92,.6],[-.66,.82],[-.3,.96],[0,1],[.3,.96],[.66,.82],[.92,.6],[1,.38],[.98,.18],[.86,0]];
+  const fi=spline(LVP.map(([u,v])=>[L.cx+u*aL,lb-v*LL])), fo=off(fi,wf);
+  let rfi,rfo,rb,rvMin=0;
+  if(o.rv){const R=o.rv;rb=R.base-7*c;
+    if(R.pts){const sx=1-.2*c,sd=1-.12*c;rfi=spline(R.pts.map(([x,d])=>[R.cx+(x-R.cx)*sx,rb-(R.base-d)*sd]));rvMin=Math.min(...R.pts.map(p=>p[0]))}
+    else{rfi=U(R.cx,rb,R.a*(1-.2*c),R.L-9*c,.7);rvMin=R.cx-R.a}
+    rfo=off(rfi,()=>4.5)}
+  const atr=(A,base)=>({x:A.cx,y:base+A.ry*(1+.08*c)-4,rx:A.rx*(1+.06*c),ry:A.ry*(1+.08*c)});
+  const la=atr(o.la,lb), ra=o.ra?atr(o.ra,rb):null;
+  const geo={c,lb,fi,fo,rfi,rb,la,ra,mo,ao,L};
+  const ts=[0,.2,.37,.46,.54,.63,.8,1];
+  const segs=o.segs.map((id,i)=>({id,poly:band(fi,fo,ts[i],ts[i+1])}));
+  if(o.rv)segs.push({art:"RCA",poly:band(rfi,rfo,0,.5),ab:"RV"});
+  return{
+    draw(g){
+      chest(g);
+      const minX=(o.rv?rfi(0):fi(0))[0]-1, maxX=fi(1)[0]+1;
+      fillPoly(g,samp(fo,0,1,40),G.MYO);
+      if(o.rv)fillPoly(g,samp(rfo,0,1,40),G.MYO);
+      fillPoly(g,[[minX,lb-5],[maxX,lb-5],[maxX,lb+5],[minX,lb+5]],G.MYO);
+      const LAf=atrium(la,fi(0),o.mvR?[o.mvR,lb]:fi(1)), RAf=ra?atrium(ra,rfi(0),rfi(1)):null;
+      fillPoly(g,samp(off(LAf,()=>-3.2),0,1,40),G.MYO);if(RAf)fillPoly(g,samp(off(RAf,()=>-3.2),0,1,40),G.MYO);
+      o.extra&&o.extra(g,geo,"wall");
+      stroke(g,samp(off(fi,t=>wf(t)+2.5),.5,1,30),2.6,G.BRIGHT);
+      if(o.rv)stroke(g,samp(off(rfi,()=>7),0,.5,30),2.6,G.BRIGHT);
+      fillPoly(g,samp(fi,0,1,40),G.BLOOD);
+      if(o.rv)fillPoly(g,samp(rfi,0,1,40),G.BLOOD);
+      fillPoly(g,samp(LAf,0,1,40),G.BLOOD);if(RAf)fillPoly(g,samp(RAf,0,1,40),G.BLOOD);
+      o.extra&&o.extra(g,geo,"blood");
+      const h1=fi(0), h2=o.mvR?[o.mvR,lb]:fi(1);
+      geo.mvTips=valve(g,h1,h2,[lerp(h1[0],h2[0],o.coapt||.6),lb+3],norm([.12,-1]),norm([-.12,-1]),mo,1.6);
+      if(o.rv){const t1=rfi(0),t2=rfi(1);geo.tvTips=valve(g,t1,t2,[lerp(t1[0],t2[0],o.tvCoapt||.5),rb+3],norm([.12,-1]),norm([-.12,-1]),mo,1.4)}
+      o.extra&&o.extra(g,geo,"valve");
+    },
+    segs, labels:o.labels(geo), cal:o.cal(geo)
+  };
+}
+/* 四腔像の細部:調節帯・右室の肉柱・乳頭筋と腱索・卵円窩・肺静脈・下行大動脈 */
+const a4pm=q=>{const p=q.fi(.8);return[lerp(p[0],q.L.cx,.2),p[1]+2]};
+const a4mb=q=>[q.rfi(.8),q.rfi(.33)];
+function a4extra(g,q,ph){
+  const by=q.la.y+q.la.ry;
+  if(ph==="wall")ell(g,36,by+15,11,11,175);
+  if(ph==="blood"){
+    stroke(g,[[14,by-3],[9,by+11]],4.5,G.BLOOD);stroke(g,[[38,by-3],[44,by+9]],4.5,G.BLOOD);ell(g,36,by+15,8.5,8.5,G.BLOOD);
+    ell(g,2.5,q.la.y+3,1.3,5.5,58);
+    [.1,.17,.24,.31,.38].forEach(t=>{const p=q.rfi(t),r=q.rfi(t+.01),n=norm([-(r[1]-p[1]),r[0]-p[0]]);ell(g,p[0]+n[0]*.8,p[1]+n[1]*.8,1.8,1.1,92,Math.atan2(r[1]-p[1],r[0]-p[0]))});
+    const [m1,m2]=a4mb(q);stroke(g,[m1,lerpP(m1,m2,.5).map((v,i)=>v+(i?2:0)),m2],2.4,105);
+    const pm=a4pm(q);ell(g,pm[0],pm[1],4.2*(1+.2*q.c),10*(1-.1*q.c),G.MYO,-.15);
+  }
+  if(ph==="valve"&&q.mvTips){const pm=a4pm(q),tip=[pm[0]-1,pm[1]+9];q.mvTips.forEach(t=>stroke(g,[tip,t],.45,150))}
+}
+const AO3=[[2,97],[24,90],[68,146],[42,158]], aoAt=s=>[[2+40*s,97+61*s],[24+44*s,90+56*s]];
+const BUILD={
+  plax:bPLAX,
+  "psax-av":bAV,
+  "psax-mv":st=>bPSAX(st,{cx:12,cy:78,r:24,w:9,rv:[-10,60,38,25,-.3],mv:1,segs:[1,2,3,4,5,6]}),
+  "psax-pm":st=>bPSAX(st,{cx:12,cy:78,r:22,w:10,rv:[-9,62,36,23,-.3],pm:1,segs:[7,8,9,10,11,12]}),
+  "psax-ap":st=>bPSAX(st,{cx:8,cy:70,r:12,w:9,rv:[-6,60,18,11,-.3],segs:[13,14,15,16]}),
+  a4c:st=>bApical(st,{lv:{cx:27,base:100,a:25,L:80},
+    rv:{cx:-24,base:94,pts:[[-42,94],[-45,80],[-42,64],[-33,50],[-21,41],[-12,49],[-8,63],[-6,79],[-7,94]]},
+    la:{cx:25,rx:21,ry:24},ra:{cx:-21,rx:22,ry:25},segs:[3,9,14,17,16,12,6],tvCoapt:.64,extra:a4extra,
+    labels:q=>{const pm=a4pm(q),[m1,m2]=a4mb(q),mb=lerpP(m1,m2,.5);return[["LV",30,58],["RV",-26,72],["LA",25,124],["RA",-21,118],["IVS",0,66],["IAS",2.5,q.la.y+12],["FO",9,q.la.y+1],["MV",25,96],["TV",-24,89],["PV",8,152],["DAo",38,162],["MB",mb[0],mb[1]-5],["ALPM",pm[0]+9,pm[1]]]},
+    cal:q=>[cal(q.fi(.5),[27,q.lb],"LV長径"),cal(q.rfi(.03),q.rfi(.97),"RV基部")]}),
+  a2c:st=>bApical(st,{lv:{cx:0,base:100,a:25,L:80},la:{cx:0,rx:23,ry:23},segs:[4,10,15,17,13,7,1],
+    extra(g,q,ph){if(ph==="wall")ell(g,32,q.lb+12,7.5,10.5,G.MYO,.6);if(ph==="blood"){ell(g,32,q.lb+12,5,8,G.BLOOD,.6);ell(g,-31,q.lb+7,4,4,G.BLOOD)}},
+    labels:q=>[["LV",0,58],["LA",0,124],["LAA",38,104],["MV",0,97],["CS",-33,110],["Inf",-36,58],["Ant",36,58]],
+    cal:q=>[cal(q.fi(.5),[0,q.lb],"LV長径")]}),
+  a3c:st=>bApical(st,{lv:{cx:-6,base:98,a:24,L:78},la:{cx:-16,rx:19,ry:22},segs:[5,11,16,17,14,8,2],mvR:1,coapt:.55,
+    extra(g,q,ph){if(ph==="wall"){fillPoly(g,AO3,G.MYO);stroke(g,AO3.concat([AO3[0]]),7,G.MYO)}if(ph==="blood")fillPoly(g,AO3,G.BLOOD);
+      if(ph==="valve"){const[p1,p2]=aoAt(.12),d=norm([41,58]),m=lerpP(p1,p2,.5);valve(g,p1,p2,[m[0]+d[0]*3,m[1]+d[1]*3],d,d,q.ao,1.3)}},
+    labels:q=>[["LV",-6,56],["LA",-18,124],["Ao",54,140],["LVOT",14,84],["AV",34,104],["MV",-14,96]],
+    cal:q=>{const[a,b]=aoAt(.03);return[cal(a,b,"LVOT"),cal(q.fi(.5),[-6,q.lb],"LV長径")]}}),
+  ivc:bIVC
+};
+
+/* ===== 描画 ===== */
+const echo=document.getElementById("echo"), ectx=echo.getContext("2d");
+const SC=2; echo.width=LW*SC; echo.height=LH*SC;
+const OPT={lab:true,ter:true,cal:false,play:true,cut:false,l3:true};
+let cur=VIEWS[0], hiAb=null, tFrozen=0, tStart=performance.now();
+const outImg=octx.createImageData(LW,FH);
+const blurC=document.createElement("canvas");blurC.width=LW;blurC.height=FH;const bctx=blurC.getContext("2d");
+const P=(x,d)=>[APX+x*S,APY+d*S];
+
+function renderEcho(tSec){
+  const tb=tSec/1.1, ph=tb%1, st=cycle(ph);
+  const psi=(tSec/5)%1; st.insp=psi<.35?Math.sin(Math.PI*psi/.35):0;
+  const geo=BUILD[cur.id](st);
+  mctx.setTransform(1,0,0,1,0,0);mctx.fillStyle=gray(G.BG);mctx.fillRect(0,0,LW,FH);
+  mctx.setTransform(S,0,0,S,APX,APY);geo.draw(mctx);
+  /* 境界をなじませる(実際の画像は境界がややぼやける) */
+  bctx.filter="blur(1.3px)";bctx.clearRect(0,0,LW,FH);bctx.drawImage(mapC,0,0);mctx.setTransform(1,0,0,1,0,0);mctx.drawImage(blurC,0,0);
+  const src=mctx.getImageData(0,0,LW,FH).data, dst=outImg.data;
+  const wt=.5+.5*Math.sin(tSec*2.3);
+  for(let i=0,j=0;i<N;i++,j+=4){
+    const m=fanMask[i]; if(m===0){dst[j]=dst[j+1]=dst[j+2]=0;dst[j+3]=255;continue}
+    const v=src[j], n=SP1[i]*(1-wt)+SP2[i]*wt;
+    let val=(v*(.3+1.2*n)+(v<20?9*n:0))*depthGain[i]*m; if(val>255)val=255;
+    dst[j]=val;dst[j+1]=val*.97;dst[j+2]=val*.9;dst[j+3]=255;
+  }
+  octx.putImageData(outImg,0,0);
+  const g=ectx; g.setTransform(SC,0,0,SC,0,0); g.fillStyle="#000"; g.fillRect(0,0,LW,LH);
+  g.drawImage(outC,0,0);
+  hud(g,ph,tb);
+  g.save(); g.clip(fanPath);
+  if(OPT.ter)drawTerr(g,geo);
+  if(OPT.cal)drawCal(g,geo);
+  g.restore();
+  if(OPT.lab)drawLabels(g,geo);
+}
+function hud(g,ph,tb){
+  g.font="500 11px 'JetBrains Mono',monospace";g.fillStyle="#9fb0b8";g.textBaseline="top";g.textAlign="left";
+  g.fillText(cur.ab,14,12);g.fillText("TTE  2.5 MHz",14,28);g.fillText("深さ 16 cm",14,44);
+  g.textAlign="right";g.fillText("HR 55 bpm",LW-14,12);g.fillText("FR 30 Hz",LW-14,28);
+  const sys=ph<.4; g.fillStyle=sys?"#f2a65a":"#7fc8e8"; g.fillText(sys?"収縮期":"拡張期",LW-14,44);
+  g.fillStyle="#d9b26f";g.beginPath();g.moveTo(APX+26,APY-6);g.lineTo(APX+34,APY-6);g.lineTo(APX+30,APY+1);g.closePath();g.fill();
+  g.fillStyle="#7d8c94";g.textAlign="right";g.textBaseline="middle";
+  for(let cm=1;cm<=16;cm++){const y=APY+cm*10*S;g.beginPath();g.arc(LW-18,y,cm%5?1.2:2.2,0,7);g.fill();if(cm%5===0)g.fillText(cm,LW-26,y)}
+  const y0=585, amp=24, x0=20, x1=LW-20, bw=320, cx=x0+(tb%2)*bw;
+  g.lineWidth=1.6;g.lineJoin="round";
+  const seg=(a,b,col)=>{if(b<=a)return;g.strokeStyle=col;g.beginPath();for(let x=a;x<=b;x+=2){const y=y0-ecgAt(((x-x0)/bw)%1)*amp;x===a?g.moveTo(x,y):g.lineTo(x,y)}g.stroke()};
+  seg(x0,cx,"#5fd38a");seg(Math.min(x1,cx+24),x1,"rgba(95,211,138,.35)");
+  g.fillStyle="#5fd38a";g.beginPath();g.arc(cx,y0-ecgAt(tb%1)*amp,2.6,0,7);g.fill();
+  g.textAlign="left";g.textBaseline="top";g.fillStyle="#6f8a7a";g.fillText("ECG II",x0,LH-60);
+}
+function centroid(p){let x=0,y=0;p.forEach(q=>{x+=q[0];y+=q[1]});return[x/p.length,y/p.length]}
+function drawTerr(g,geo){
+  for(const s of geo.segs){
+    const art=s.art||SEG[s.id][1], col=ART[art].c;
+    if(s.line){const pts=s.line.map(q=>P(...q));g.strokeStyle=col;g.lineWidth=5;g.lineCap="round";g.beginPath();pts.forEach((p,i)=>i?g.lineTo(...p):g.moveTo(...p));g.stroke();continue}
+    const pts=s.poly.map(q=>P(...q));
+    g.beginPath();pts.forEach((p,i)=>i?g.lineTo(...p):g.moveTo(...p));g.closePath();
+    g.globalAlpha=s.id?.42:.3;g.fillStyle=col;g.fill();g.globalAlpha=.9;g.strokeStyle=col;g.lineWidth=1;g.stroke();g.globalAlpha=1;
+    if(s.id){const c=centroid(pts);g.font="700 11px 'JetBrains Mono',monospace";g.textAlign="center";g.textBaseline="middle";g.lineWidth=3;g.strokeStyle="rgba(0,0,0,.85)";g.strokeText(s.id,c[0],c[1]);g.fillStyle="#fff";g.fillText(s.id,c[0],c[1])}
+  }
+}
+function drawCal(g,geo){
+  g.font="600 11px 'JetBrains Mono',monospace";g.textBaseline="middle";g.textAlign="left";
+  for(const k of geo.cal){
+    const a=P(...k.a),b=P(...k.b),len=Math.hypot(k.a[0]-k.b[0],k.a[1]-k.b[1]);
+    const dx=b[0]-a[0],dy=b[1]-a[1],l=Math.hypot(dx,dy)||1,nx=-dy/l*5,ny=dx/l*5;
+    g.strokeStyle="#ffe08a";g.lineWidth=1.2;g.setLineDash([4,3]);g.beginPath();g.moveTo(...a);g.lineTo(...b);g.stroke();g.setLineDash([]);
+    for(const p of[a,b]){g.beginPath();g.moveTo(p[0]-nx,p[1]-ny);g.lineTo(p[0]+nx,p[1]+ny);g.stroke()}
+    const m=[(a[0]+b[0])/2+8,(a[1]+b[1])/2], t=`${k.n} ${len.toFixed(1)} mm`;
+    g.fillStyle="rgba(0,0,0,.7)";g.fillRect(m[0]-3,m[1]-8,g.measureText(t).width+6,16);g.fillStyle="#ffe08a";g.fillText(t,m[0],m[1]);
+  }
+}
+function drawLabels(g,geo){
+  g.font="600 11px 'JetBrains Mono',monospace";g.textAlign="center";g.textBaseline="middle";
+  for(const [ab,x,d] of geo.labels){
+    const p=P(x,d), w=g.measureText(ab).width+10, on=hiAb&&hiAb.split(" / ").includes(ab)||hiAb===ab;
+    g.fillStyle=on?"#d9b26f":"rgba(10,14,17,.72)";g.strokeStyle=on?"#d9b26f":"rgba(255,255,255,.22)";g.lineWidth=1;
+    g.beginPath();g.roundRect?g.roundRect(p[0]-w/2,p[1]-8,w,16,4):g.rect(p[0]-w/2,p[1]-8,w,16);g.fill();g.stroke();
+    g.fillStyle=on?"#1a1408":"#e9eef0";g.fillText(ab,p[0],p[1]+.5);
+  }
+}
+
+/* ===== 胸郭(胸椎・胸骨・肋骨・肋軟骨・鎖骨) =====
+   体の座標:+X=患者の左、+Y=頭側、+Z=前方。1単位 ≈ 4 cm。mid=正中線のx。
+   ・胸椎 T1–T12:軽い後弯。第n肋骨の後端は第n胸椎につく
+   ・肋骨は後ろが高く、前に向かって下がる(前端は後端より1.2〜1.6単位低い)
+   ・第1–7肋骨:肋軟骨で胸骨へ(真肋)/第8–10:上の肋軟骨に合流して肋骨弓を作る(仮肋)/第11–12:浮遊肋
+   ・胸骨:胸骨柄(上端=頸切痕)、胸骨角=第2肋骨の高さ、胸骨体、剣状突起。下ほど前に出る */
+function buildThorax(o){
+  const T=THREE, V=(x,y,z)=>new T.Vector3(x,y,z), mid=o.mid;
+  const g=new T.Group();
+  const yv=n=>3.84-.62*n;                                 // 第n胸椎の高さ
+  const zsp=n=>-1.25-.65*Math.sin(Math.PI*(n-.5)/12.5);    // 胸椎の前後位置(後弯)
+  const zst=y=>1.0+.75*(2.3-y)/4.4;                         // 胸骨の前後位置(下ほど前)
+  const YA=[2.0,1.3,.6,-.1,-.75,-1.35,-1.9,-2.45,-2.95,-3.4,-3.6,-3.9];   // 肋骨の前端(延長線)の高さ
+  const W=[1.3,2.0,2.5,2.85,3.1,3.3,3.4,3.45,3.4,3.3,3.15,2.95];          // 胸郭の半幅
+  const XC=[.95,1.0,1.1,1.25,1.45,1.75,2.05,2.35,2.6,2.8];                // 肋骨(骨)が終わり肋軟骨になる位置
+  const ribs=[], carts=[], labels=[];
+  const tubeOf=(pts,r,m)=>new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts),Math.max(24,pts.length*6),r,8,false),m);
+  for(let n=1;n<=12;n++){
+    const yp=yv(n), zb=zsp(n)-.55, zf=n<=7?zst(YA[n-1])-.05:zst(-2.1)+.05-.12*(n-7), zc=(zb+zf)/2, D=(zf-zb)/2, w=W[n-1];
+    const tEnd=n<=10?null:(n===11?.62:.52)*Math.PI;
+    for(const s of[-1,1]){
+      const pts=[V(mid+s*.22,yp+.05,zsp(n)+.05),V(mid+s*.6,yp,zsp(n)-.3)], t1=.17*Math.PI;
+      let last=null;
+      for(let i=0;i<=40;i++){
+        const t=t1+(Math.PI-t1)*i/40;
+        const ct=Math.cos(t),p=V(mid+s*w*Math.sin(t),yp+(YA[n-1]-yp)*Math.pow((t-t1)/(Math.PI-t1),.75),zc-D*Math.sign(ct)*Math.pow(Math.abs(ct),ct<0?.55:1));   /* 前胸壁は平たい */
+        if(tEnd&&t>tEnd)break;
+        if(!tEnd&&t>Math.PI/2&&Math.abs(p.x-mid)<XC[n-1])break;
+        pts.push(p);last=p;
+      }
+      g.add(tubeOf(pts,n<=2?.07:.06,o.bone));ribs.push({n,s,pts});
+      if(n<=10){
+        let E;
+        if(n<=7)E=V(mid+s*.46,YA[n-1],zst(YA[n-1]));
+        else{const pc=carts.find(c=>c.n===n-1&&c.s===s);E=pc.curve.getPoint(n===8?.55:.4)}
+        const M=last.clone().lerp(E,.5);M.z+=.08;if(n>=8)M.y-=.05;
+        const curve=new T.CatmullRomCurve3([last,M,E]);
+        g.add(new T.Mesh(new T.TubeGeometry(curve,16,.055,8,false),o.cart));
+        carts.push({n,s,curve});ribs[ribs.length-1].cart=curve;
+      }
+      if(s===1&&n<=7)labels.push([String(n),pts[Math.min(pts.length-1,Math.floor(pts.length*.55))].clone()]);
+    }
+  }
+  /* 胸椎(T1–T12)と第1腰椎:椎体・棘突起・横突起 */
+  for(let n=1;n<=13;n++){
+    const zz=n<=12?zsp(n):-1.55, yy=yv(n);
+    const b=new T.Mesh(new T.CylinderGeometry(.26+.008*n,.27+.008*n,.46,20),o.spine);b.scale.z=.85;b.position.set(mid,yy,zz);g.add(b);
+    const sp=new T.Mesh(new T.BoxGeometry(.1,.16,.55),o.spine);sp.position.set(mid,yy-.2,zz-.6);sp.rotation.x=-.5;g.add(sp);
+    const tp=new T.Mesh(new T.BoxGeometry(1.05,.13,.14),o.spine);tp.position.set(mid,yy+.03,zz-.38);g.add(tp);
+  }
+  /* 胸骨:柄・体・剣状突起(傾きつき) */
+  const st=new T.Group();g.add(st);
+  const plate=(pts,y0)=>{const sh=new T.Shape();pts.forEach(([x,y],i)=>i?sh.lineTo(x,y):sh.moveTo(x,y));const m=new T.Mesh(new T.ExtrudeGeometry(sh,{depth:.16,bevelEnabled:false}),o.bone);return m};
+  const tilt=Math.atan2(.75,4.4);
+  const sg=new T.Group();sg.position.set(mid,2.3,1.0-.08);sg.rotation.x=-tilt;g.add(sg);
+  sg.add(plate([[-.6,0],[-.18,0],[0,-.1],[.18,0],[.6,0],[.42,-.95],[-.42,-.95]]));            // 胸骨柄(頸切痕つき)
+  sg.add(plate([[-.4,-1.0],[.4,-1.0],[.47,-2.6],[.42,-4.35],[-.42,-4.35],[-.47,-2.6]]));          // 胸骨体
+  sg.add(plate([[-.2,-4.42],[.2,-4.42],[.08,-4.95],[-.08,-4.95]]));                                // 剣状突起
+  /* 鎖骨 */
+  for(const s of[-1,1])g.add(tubeOf([V(mid+s*.5,2.35,1.0),V(mid+s*1.4,2.55,1.15),V(mid+s*2.5,2.75,.7),V(mid+s*3.15,2.85,-.2)],.085,o.bone));
+  labels.push(["肋骨弓",V(mid+2.2,-3.0,1.25)],["胸骨柄",V(mid,1.85,1.3)],["胸骨体",V(mid,-.5,1.62)],["剣状突起",V(mid,-2.5,1.86)],["胸椎",V(mid,.1,zsp(6)-.95)],["鎖骨",V(mid+1.9,2.95,1.0)]);
+  /* 肋間の体表点:第k肋骨と第k+1肋骨の間、正中から xoff の位置(前面) */
+  function ics(k,xoff,side=1){
+    const near=n=>{const r=ribs.find(r=>r.n===n&&r.s===side);let best=null,bd=1e9;
+      const all=r.pts.concat(r.cart?r.cart.getPoints(12):[]);
+      for(const p of all){if(p.z<-.2)continue;const d=Math.abs((p.x-mid)*side-xoff);if(d<bd){bd=d;best=p}}return best};
+    const a=near(k),b=near(k+1);return a.clone().lerp(b,.5).add(V(0,0,.14))}
+  return{group:g,labels,ics,xiph:V(mid,2.3-4.95*Math.cos(tilt),1.0+4.95*Math.sin(tilt)),zst};
+}
+
+/* ===== 3D 心臓 ===== */
+/* 心臓座標:+Y=心基部(心尖は−Y)、+X=左室側壁(患者の左)、+Z=前方。体の座標:+X=患者の左、+Y=頭側、+Z=前方 */
+const T3={};
+(function(){
+  if(!window.THREE){document.getElementById("orient").textContent="3D表示を読み込めませんでした";return}
+  const box=document.getElementById("three");
+  const R=new THREE.WebGLRenderer({antialias:true,alpha:true});R.localClippingEnabled=true;R.setPixelRatio(Math.min(2,devicePixelRatio));
+  box.prepend(R.domElement);
+  const scene=new THREE.Scene(), cam=new THREE.PerspectiveCamera(34,1,.1,100);cam.position.set(.3,-.2,11.5);
+  scene.add(new THREE.HemisphereLight(0xe6eefc,0x2a1c1c,.95));
+  const dl=new THREE.DirectionalLight(0xffffff,.85);dl.position.set(3,5,7);scene.add(dl);
+  const dl2=new THREE.DirectionalLight(0x9fc4ff,.35);dl2.position.set(-4,-2,-5);scene.add(dl2);
+  const world=new THREE.Group();scene.add(world);
+  const heart=new THREE.Group();world.add(heart);
+  /* 心尖は「左・前・やや下」を向く(造影シミュレーターと同じ向き) */
+  const q=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),deg(-57.7)).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),deg(38.3)));
+  heart.quaternion.copy(q);
+  heart.position.copy(new THREE.Vector3(0,.5,0).applyQuaternion(q).negate());
+  const V=(x,y,z)=>new THREE.Vector3(x,y,z);
+  const toBody=v=>v.clone().applyQuaternion(q).add(heart.position);
+  const clip=new THREE.Plane(), mats=[];
+  const mat=(col,o={})=>{const m=new THREE.MeshStandardMaterial(Object.assign({color:col,roughness:.62,metalness:.04,side:THREE.DoubleSide},o));mats.push(m);return m};
+  function blob(r,sc,pos,col,taper=0){
+    const g=new THREE.SphereGeometry(r,48,32);
+    if(taper){const p=g.attributes.position;for(let i=0;i<p.count;i++){const y=p.getY(i)/r;if(y<0){const f=1+taper*y;p.setX(i,p.getX(i)*f);p.setZ(i,p.getZ(i)*f)}}g.computeVertexNormals()}
+    const m=new THREE.Mesh(g,mat(col));m.scale.set(...sc);m.position.copy(pos);heart.add(m);return m;
+  }
+  const LV=blob(1,[.78,1.3,.78],V(.35,-.25,0),0xa8484a,.28);
+  const RV=blob(1,[.62,1.0,.55],V(-.5,-.05,.38),0xb85a58,.3);RV.rotation.z=.12;
+  blob(.58,[1,.8,.9],V(.25,1.25,-.6),0xc77a6e);
+  blob(.6,[1,1.1,.95],V(-.95,1.0,-.1),0xc98476);
+  blob(.3,[1.1,.6,.7],V(.78,1.15,.15),0xc77a6e);
+  blob(.3,[.9,.7,.8],V(-.75,1.45,.45),0xc98476);
+  function tube(pts,r,col,parent=heart,o){const c=new THREE.CatmullRomCurve3(pts);const m=new THREE.Mesh(new THREE.TubeGeometry(c,Math.max(24,pts.length*16),r,14,false),mat(col,o));parent.add(m);return m}
+  const AJ=toBody(V(0,.85,.05)), PJ=toBody(V(-.3,.95,.7));
+  const add=(J,x,y,z)=>J.clone().add(V(x,y,z));
+  tube([AJ,add(AJ,-.15,.6,.1),add(AJ,-.1,1.25,0),add(AJ,.3,1.6,-.5),add(AJ,.3,1.25,-1.05),add(AJ,.22,.6,-1.3),add(AJ,.2,-1.8,-1.3)],.24,0xd04a46,world);
+  [[.0,1.5,-.15],[.18,1.6,-.32],[.36,1.58,-.5]].forEach(([x,y,z])=>tube([add(AJ,x,y,z),add(AJ,x-.05,y+.55,z)],.08,0xd04a46,world));
+  const PB=add(PJ,.55,.8,-.3);
+  tube([PJ,add(PJ,.15,.5,0),PB],.22,0x6d6fc4,world);
+  tube([PB,add(PJ,.95,.85,-.55),add(PJ,1.25,.75,-.85)],.15,0x6d6fc4,world);
+  tube([PB,add(PJ,0,.78,-.75),add(PJ,-.6,.72,-.85)],.15,0x6d6fc4,world);
+  const SJ=toBody(V(-.95,1.5,-.1)), IJ=toBody(V(-.9,.5,-.3));
+  tube([SJ,add(SJ,0,.7,0),add(SJ,0,1.3,0)],.18,0x4f6fb8,world);
+  tube([IJ,add(IJ,0,-.7,-.05),add(IJ,0,-1.4,-.1)],.2,0x4f6fb8,world);
+  [[.55,1.35,-.95,.5,.15],[.55,1.0,-.95,.5,-.1],[-.05,1.35,-.95,-.5,.1],[-.05,1.0,-.95,-.5,-.1]].forEach(([x,y,z,dx,dy])=>{const J=toBody(V(x,y,z));tube([J,add(J,dx,dy,-.2)],.08,0x9a3c44,world)});
+  /* 冠動脈 */
+  const lvPt=(f,y)=>{const yl=clamp((y+.25)/1.3,-.995,.995),s=Math.sqrt(1-yl*yl),t=yl<0?1+.28*yl:1;return V(.35+.78*t*s*Math.cos(deg(f))*1.06,y,.78*t*s*Math.sin(deg(f))*1.06)};
+  const rvPt=(f,y)=>{const yl=clamp((y+.05)/1.0,-.99,.99),s=Math.sqrt(1-yl*yl),t=yl<0?1+.3*yl:1;return V(-.5+.62*t*s*Math.cos(deg(f))*1.08,y,.38+.55*t*s*Math.sin(deg(f))*1.08)};
+  const cor=(pts,art,r=.04)=>tube(pts,r,new THREE.Color(ART[art].c).getHex(),heart,{emissive:new THREE.Color(ART[art].c),emissiveIntensity:.35,roughness:.4});
+  cor([V(.02,.95,.32),lvPt(112,1.0),lvPt(118,.6),lvPt(120,0),lvPt(118,-.6),lvPt(110,-1.2),lvPt(60,-1.5)],"LAD",.045);
+  cor([lvPt(116,.45),lvPt(85,.15),lvPt(55,-.3),lvPt(40,-.7)],"LAD",.03);
+  cor([lvPt(118,-.2),lvPt(90,-.5),lvPt(65,-.95)],"LAD",.028);
+  cor([lvPt(112,1.0),lvPt(80,.98),lvPt(30,.95),lvPt(-20,.92),lvPt(-70,.88),lvPt(-100,.82)],"LCX",.04);
+  cor([lvPt(20,.94),lvPt(8,.4),lvPt(0,-.2),lvPt(-5,-.8)],"LCX",.03);
+  cor([lvPt(-50,.9),lvPt(-55,.3),lvPt(-58,-.4)],"LCX",.028);
+  cor([V(-.12,1.0,.36),rvPt(95,.8),rvPt(130,.75),rvPt(170,.68),rvPt(215,.6),rvPt(250,.55),lvPt(-125,.55),lvPt(-118,.1),lvPt(-112,-.6),lvPt(-100,-1.15)],"RCA",.045);
+  cor([rvPt(175,.66),rvPt(182,.0),rvPt(190,-.6)],"RCA",.03);
+  /* プローブと扇 */
+  const fanG=new THREE.CircleGeometry(4,40,-Math.PI/2-HA,2*HA);
+  const fan=new THREE.Mesh(fanG,new THREE.MeshBasicMaterial({color:0xd9b26f,transparent:true,opacity:.24,side:THREE.DoubleSide,depthTest:false,depthWrite:false}));
+  fan.renderOrder=10;fan.matrixAutoUpdate=false;world.add(fan);
+  const eg=new THREE.EdgesGeometry(fanG);
+  const edge=new THREE.LineSegments(eg,new THREE.LineBasicMaterial({color:0xffd98f,transparent:true,opacity:.9,depthTest:false}));edge.renderOrder=11;fan.add(edge);
+  const probe=new THREE.Group();probe.matrixAutoUpdate=false;world.add(probe);
+  const pm=new THREE.MeshStandardMaterial({color:0xdfe4e8,roughness:.35,metalness:.1});
+  const b1=new THREE.Mesh(new THREE.CylinderGeometry(.17,.22,1.0,24),pm);b1.position.y=.62;probe.add(b1);
+  const b2=new THREE.Mesh(new THREE.BoxGeometry(.56,.16,.26),pm);b2.position.y=.1;probe.add(b2);
+  const mk=new THREE.Mesh(new THREE.SphereGeometry(.07,16,12),new THREE.MeshBasicMaterial({color:0xd9b26f}));mk.position.set(.32,.12,0);probe.add(mk);
+  /* 胸郭(胸骨と肋骨):プローブを当てる「窓」の目安。体の座標で置く */
+  /* 胸郭:胸椎・胸骨・肋骨12対・肋軟骨・鎖骨(buildThorax)。心尖部のプローブ位置が第5肋間に来るよう位置を合わせる */
+  const MID=-.55;
+  const TH=buildThorax({mid:MID,
+    bone:new THREE.MeshStandardMaterial({color:0xece4d2,roughness:.8,transparent:true,opacity:.42,depthWrite:false}),
+    cart:new THREE.MeshStandardMaterial({color:0x9fc4d6,roughness:.6,transparent:true,opacity:.42,depthWrite:false}),
+    spine:new THREE.MeshStandardMaterial({color:0xd9cfb8,roughness:.8,transparent:true,opacity:.5,depthWrite:false})});
+  const chestG=TH.group;world.add(chestG);
+  T3.setChest=on=>{chestG.visible=on};
+  /* プローブの姿勢(体の座標)。心臓は動かさず、プローブだけを「当てる位置・傾き・回転」で動かす */
+  const qv=v=>v.clone().applyQuaternion(q), aimTo=(P,t)=>t.clone().sub(P).normalize();
+  const AP=toBody(V(.5,-1.75,.05)), AD=V(-.256,.96,-.128);
+  /* 胸郭の位置合わせ:上下は「大動脈弁 ≒ 第3肋間の胸骨左縁の高さ」、前後は「心尖のプローブ ≒ 胸壁の表面」 */
+  const p3=TH.ics(3,.62), TS=V(0,AJ.y-.1-p3.y,0);
+  {let best=null;for(let k=3;k<=7;k++){const p=TH.ics(k,AP.x-MID).add(TS);if(!best||Math.abs(p.y-AP.y)<Math.abs(best.p.y-AP.y))best={k,p}}TS.z=AP.z-best.p.z;T3.apICS=best.k}
+  chestG.position.copy(TS);
+  const PS=TH.ics(3,.62).add(TS), PS2=TH.ics(4,.62).add(TS), XP=TH.xiph.clone().add(TS), SW=V(IJ.x,XP.y-.45,XP.z+.05);
+  T3.dbg={PS,PS2,AP,SW,TS,XP};
+  const PR={
+    plax:[PS,aimTo(PS,toBody(V(.2,.3,0))),qv(V(0,1,0))],
+    "psax-av":[PS,aimTo(PS,toBody(V(.15,1.05,0))),qv(V(1,0,0))],
+    "psax-mv":[PS,aimTo(PS,toBody(V(.2,.7,0))),qv(V(1,0,0))],
+    "psax-pm":[PS,aimTo(PS,toBody(V(.3,0,0))),qv(V(1,0,0))],
+    "psax-ap":[PS2,aimTo(PS2,toBody(V(.35,-.85,0))),qv(V(1,0,0))],
+    /* 四腔像の面は「心尖・右室・左房」を通るように合わせ、そこから約60°ずつ反時計回りに二腔→三腔 */
+    a4c:[AP,qv(AD),qv(V(.743,.11,-.66))],
+    a2c:[AP,qv(AD),qv(V(.908,.284,.312))],
+    a3c:[AP,qv(AD),qv(V(.482,.241,.845))],
+    ivc:[SW,aimTo(SW,IJ.clone().add(V(0,.5,0))),V(0,1,0)]
+  };
+  function basis(P,D,U){const d=D.clone().normalize(),u=U.clone().sub(d.clone().multiplyScalar(U.dot(d))).normalize(),y=d.clone().negate(),z=new THREE.Vector3().crossVectors(u,y);return new THREE.Matrix4().makeBasis(u,y,z).setPosition(P)}
+  const pose=p=>({P:p[0].clone(),Q:new THREE.Quaternion().setFromRotationMatrix(basis(p[0],p[1],p[2]))});
+  const one=new THREE.Vector3(1,1,1), curP=new THREE.Vector3(), curQ=new THREE.Quaternion();
+  let A=null,B=null,tr=1,dur=.8,lastF=performance.now();
+  function applyPose(k){
+    curP.copy(A.P).lerp(B.P,k);
+    const dist=A.P.distanceTo(B.P);
+    if(dist>.3)curP.add(A.P.clone().add(B.P).normalize().multiplyScalar(Math.sin(Math.PI*k)*(.45+.25*dist)));
+    curQ.copy(A.Q).slerp(B.Q,k);
+    const m=new THREE.Matrix4().compose(curP,curQ,one);fan.matrix.copy(m);probe.matrix.copy(m);
+  }
+  T3.setView=id=>{const p=pose(PR[id]);if(!B){A=B=p;applyPose(1);return}
+    A={P:curP.clone(),Q:curQ.clone()};B=p;dur=A.P.distanceTo(B.P)>.3?1.4:.8;tr=0};
+  /* ラベル */
+  const lab=document.getElementById("labels3d");
+  const L3=[["LV",lvPt(-10,-.45)],["RV",rvPt(130,-.3)],["LA",V(.55,1.45,-.95)],["RA",V(-1.45,1.0,-.1)],["LAD",lvPt(119,-.35)],["LCX",lvPt(-30,.92)],["RCA",rvPt(160,.68)]].map(([t,v])=>{const o=new THREE.Object3D();o.position.copy(v);heart.add(o);const e=document.createElement("div");e.className="l3";e.textContent=t;const a=ART[t];if(a){e.style.borderColor=a.c;e.style.color=a.c}lab.appendChild(e);return[o,e]});
+  TH.labels.forEach(([t,v])=>{const o=new THREE.Object3D();o.position.copy(v);chestG.add(o);const e=document.createElement("div");e.className="l3 bone";e.textContent=/^\d+$/.test(t)?"第"+t+"肋骨":t;lab.appendChild(e);L3.push([o,e,1])});
+  [["Ao",add(AJ,-.1,1.3,.1)],["PA",add(PJ,.1,.45,.05)],["SVC",add(SJ,0,1.0,0)],["IVC",add(IJ,0,-1.1,0)]].forEach(([t,v])=>{const o=new THREE.Object3D();o.position.copy(v);world.add(o);const e=document.createElement("div");e.className="l3";e.textContent=t;lab.appendChild(e);L3.push([o,e])});
+  /* 操作 */
+  world.rotation.set(.12,-.35,0);
+  const ptrs=new Map();let pinch0=0,z0=10;
+  box.addEventListener("pointerdown",e=>{box.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,[e.clientX,e.clientY]);if(ptrs.size===2){const[a,b]=[...ptrs.values()];pinch0=Math.hypot(a[0]-b[0],a[1]-b[1]);z0=cam.position.z}});
+  box.addEventListener("pointermove",e=>{if(!ptrs.has(e.pointerId))return;const p=ptrs.get(e.pointerId);
+    if(ptrs.size===1){world.rotation.y+=(e.clientX-p[0])*.008;world.rotation.x=clamp(world.rotation.x+(e.clientY-p[1])*.008,-1.4,1.4)}
+    ptrs.set(e.pointerId,[e.clientX,e.clientY]);
+    if(ptrs.size===2){const[a,b]=[...ptrs.values()];const d=Math.hypot(a[0]-b[0],a[1]-b[1]);cam.position.z=clamp(z0*pinch0/d,5,16)}});
+  const up=e=>ptrs.delete(e.pointerId);box.addEventListener("pointerup",up);box.addEventListener("pointercancel",up);
+  box.addEventListener("wheel",e=>{e.preventDefault();cam.position.z=clamp(cam.position.z*(1+e.deltaY*.001),5,16)},{passive:false});
+  T3.reset=()=>{world.rotation.set(.12,-.35,0);cam.position.z=11.5};
+  T3.setCut=on=>{mats.forEach(m=>{m.clippingPlanes=on?[clip]:[];m.needsUpdate=true})};
+  function size(){const w=box.clientWidth,h=box.clientHeight;R.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()}
+  new ResizeObserver(size).observe(box);size();
+  const tmp=new THREE.Vector3(),n=new THREE.Vector3(),p0=new THREE.Vector3();
+  T3.frame=(tSec,c)=>{
+    const nowF=performance.now(),dtF=Math.min(.1,(nowF-lastF)/1000);lastF=nowF;
+    if(tr<1){tr=Math.min(1,tr+dtF/dur);const k=tr*tr*(3-2*tr);applyPose(k)}
+    const s=1-.05*c;LV.scale.set(.78*s,1.3*(1-.02*c),.78*s);RV.scale.set(.62*(1-.04*c),1.0,.55*(1-.04*c));
+    scene.updateMatrixWorld();
+    n.set(0,0,1).transformDirection(fan.matrixWorld);p0.setFromMatrixPosition(fan.matrixWorld);
+    if(n.dot(tmp.copy(cam.position).sub(p0))>0)n.negate();
+    clip.setFromNormalAndCoplanarPoint(n,p0);
+    R.render(scene,cam);
+    const w=box.clientWidth,h=box.clientHeight;
+    for(const[o,e,ch]of L3){if(!OPT.l3||(ch&&!chestG.visible)){e.hidden=true;continue}o.getWorldPosition(tmp);tmp.project(cam);e.hidden=false;e.style.left=((tmp.x+1)/2*w)+"px";e.style.top=((1-tmp.y)/2*h)+"px"}
+  };
+})();
+
+/* ===== UI ===== */
+const $=id=>document.getElementById(id);
+const SHORT={plax:"長軸",["psax-av"]:"短軸・大動脈弁",["psax-mv"]:"短軸・僧帽弁",["psax-pm"]:"短軸・乳頭筋",["psax-ap"]:"短軸・心尖部",a4c:"四腔",a2c:"二腔",a3c:"長軸(三腔)",ivc:"下大静脈"};
+(function nav(){
+  const groups=[...new Set(VIEWS.map(v=>v.group))];
+  $("views").innerHTML=groups.map(g=>`<div class="vgroup"><span class="gl">${g}アプローチ</span><div class="chips">${VIEWS.filter(v=>v.group===g).map(v=>`<button class="chip" data-v="${v.id}" aria-pressed="false"><b>${v.ab}</b>${SHORT[v.id]}</button>`).join("")}</div></div>`).join("");
+  $("views").addEventListener("click",e=>{const b=e.target.closest(".chip");if(b)setView(b.dataset.v)});
+})();
+function setView(id){
+  cur=VIEWS.find(v=>v.id===id)||VIEWS[0]; hiAb=null;
+  document.querySelectorAll(".chip").forEach(b=>b.setAttribute("aria-pressed",b.dataset.v===cur.id));
+  $("viewName").textContent=`${cur.ab} ${cur.name}`; $("viewSub").textContent=cur.sub;$("move").textContent="プローブ操作:"+cur.sub;
+  T3.setView&&T3.setView(cur.id);
+  const G_=cur.guide;
+  $("panel-guide").innerHTML=`<h3>${cur.name}</h3><p>${G_.lead}</p><div class="cols"><div><h4>プローブの当て方</h4><p>${G_.probe}</p></div><div><h4>画面の見方</h4><p>${G_.see}</p></div></div><h4>上手に見るコツ</h4><ul>${G_.tips.map(t=>`<li>${t}</li>`).join("")}</ul>
+  <div class="callout">エコー画面の読み方:扇のかなめ(画面の一番上)がプローブの当たっている所で、下に行くほど体の奥です。血液は黒く、心筋はざらざらした灰色、弁や心膜は白く光って見えます。右上の小さな三角は、プローブのマーカー側が画面の右に来ることを示しています。</div>`;
+  $("panel-anat").innerHTML=`<h3>この断面に写る構造</h3><p class="note" style="margin:0 0 10px">項目にカーソルを合わせる(タップする)と、エコー画像の中で光ります。</p><ul class="legend">${cur.anat.map(([ab,nm,ds])=>`<li tabindex="0" data-ab="${ab}"><span class="ab">${ab}</span><span class="nm">${nm}</span><span class="ds">${ds}</span></li>`).join("")}</ul>`;
+  const segs=cur.segs;
+  $("corText").innerHTML=`<h3>${cur.ab} で見える冠動脈の領域</h3><p>${cur.cor}</p>`+
+    (segs.length?`<h4>この断面のセグメント(画面の左から順に)</h4><ul class="seglist">${segs.map(s=>`<li><span class="d" style="background:${ART[SEG[s][1]].c}"></span><span class="n">${s}</span><span>${SEG[s][0]}<span class="note" style="margin:0"> ・${SEG[s][1]}${SEG[s][2]?"(※"+SEG[s][2]+")":""}</span></span></li>`).join("")}</ul>`:"")+
+    `<div class="callout"><b>3本の冠動脈のざっくりした役割</b><br><span style="color:var(--lad)">LAD(左前下行枝)</span>:前壁・中隔の前2/3・心尖部。左室のいちばん広い範囲を養います。<br><span style="color:var(--lcx)">LCX(左回旋枝)</span>:側壁(前側壁・下側壁)。房室間溝を後ろへ回り込みます。<br><span style="color:var(--rca)">RCA(右冠動脈)</span>:下壁・中隔の下1/3・右室。多くの人(約8割の「右冠優位」)では後下行枝(PDA)を出します。</div>`;
+  $("panel-meas").innerHTML=`<h3>${cur.ab} で確認できる主な数値</h3><div class="tblwrap"><table><thead><tr><th>項目</th><th>正常の目安</th><th>測り方・意味</th><th>この画像の例</th></tr></thead><tbody>${cur.meas.map(([a,b,c,d])=>`<tr><td><b>${a}</b></td><td class="v">${b}</td><td>${c}</td><td class="ex">${d}</td></tr>`).join("")}</tbody></table></div><p class="note">「計測ライン」をオンにすると、画像の上でキャリパーの当て方と長さ(動きに合わせて変化)が見られます。基準値は成人の一般的な目安です。</p>`;
+  drawBulls();
+}
+function drawBulls(){
+  const c=$("bulls"),g=c.getContext("2d"),cx=220,cy=220,R=[0,36,85,135,185];
+  g.clearRect(0,0,440,440);
+  const rings=[[[1,-120,-60],[2,-180,-120],[3,120,180],[4,60,120],[5,0,60],[6,-60,0]],[[7,-120,-60],[8,-180,-120],[9,120,180],[10,60,120],[11,0,60],[12,-60,0]],[[13,-135,-45],[14,135,225],[15,45,135],[16,-45,45]]];
+  const on=new Set(cur.segs);
+  const draw=(id,r1,r2,a0,a1)=>{g.beginPath();if(r1===0)g.arc(cx,cy,r2,0,7);else{g.arc(cx,cy,r2,deg(a0),deg(a1));g.arc(cx,cy,r1,deg(a1),deg(a0),true)}g.closePath();
+    g.globalAlpha=on.has(id)?.95:.16;g.fillStyle=ART[SEG[id][1]].c;g.fill();g.globalAlpha=1;g.strokeStyle="#0c1013";g.lineWidth=3;g.stroke();
+    const am=deg((a0+a1)/2),rm=r1===0?0:(r1+r2)/2;g.fillStyle=on.has(id)?"#0c1013":"#8a9aa4";g.font="700 22px 'JetBrains Mono',monospace";g.textAlign="center";g.textBaseline="middle";g.fillText(id,cx+rm*Math.cos(am),cy+rm*Math.sin(am))};
+  rings[0].forEach(([id,a,b])=>draw(id,R[3],R[4],a,b));rings[1].forEach(([id,a,b])=>draw(id,R[2],R[3],a,b));rings[2].forEach(([id,a,b])=>draw(id,R[1],R[2],a,b));draw(17,0,R[1],0,360);
+  g.fillStyle="#8a9aa4";g.font="500 18px 'Zen Kaku Gothic New',sans-serif";
+  g.fillText("前壁",cx,14);g.fillText("下壁",cx,428);g.save();g.translate(14,cy);g.rotate(-Math.PI/2);g.fillText("中隔",0,0);g.restore();g.save();g.translate(426,cy);g.rotate(Math.PI/2);g.fillText("側壁",0,0);g.restore();
+}
+/* トグル */
+function bindTog(id,key,fn){const b=$(id);b.addEventListener("click",()=>{OPT[key]=!OPT[key];b.setAttribute("aria-pressed",OPT[key]);fn&&fn(OPT[key])})}
+bindTog("tLab","lab");bindTog("tTer","ter");bindTog("tCal","cal");bindTog("tL3","l3");
+bindTog("tPlay","play");
+OPT.chest=true;bindTog("tChest","chest",on=>T3.setChest&&T3.setChest(on));
+bindTog("tCut","cut",on=>T3.setCut&&T3.setCut(on));
+$("tReset").addEventListener("click",()=>T3.reset&&T3.reset());
+/* タブ */
+document.querySelector(".tabs").addEventListener("click",e=>{const t=e.target.closest(".tab");if(!t)return;
+  document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected",b===t));
+  ["guide","anat","cor","meas"].forEach(k=>$("panel-"+k).hidden=k!==t.dataset.tab)});
+/* 解剖リストのハイライト */
+const anat=$("panel-anat");
+const hi=e=>{const li=e.target.closest&&e.target.closest("li[data-ab]");anat.querySelectorAll("li").forEach(x=>x.classList.toggle("on",x===li));hiAb=li?li.dataset.ab:null};
+["mouseover","focusin","click"].forEach(ev=>anat.addEventListener(ev,hi));
+anat.addEventListener("mouseleave",()=>{hiAb=null;anat.querySelectorAll("li").forEach(x=>x.classList.remove("on"))});
+/* ループ */
+let tv=0,last=performance.now(),acc=0;
+function loop(now){
+  const dt=Math.min(.1,(now-last)/1000);last=now;
+  if(OPT.play&&!matchMedia("(prefers-reduced-motion: reduce)").matches)tv+=dt;
+  acc+=dt;
+  if(acc>=1/30){acc=0;renderEcho(tv)}
+  if(T3.frame){const ph=(tv/1.1)%1;T3.frame(tv,cycle(ph).c)}
+  requestAnimationFrame(loop);
+}
+const h=(location.hash||"").slice(1);
+setView(VIEWS.some(v=>v.id===h)?h:"plax");
+renderEcho(0.12);
+requestAnimationFrame(loop);
+
+/* ===== 冠動脈 3D 模式図 ===== */
+/* AHA分類の番号つき。dom:"R"は右冠優位のときだけ、"L"は左冠優位のときだけ表示 */
+const BR=[
+ {id:"rca1",aha:"#1",ab:"RCA近位",art:"RCA",name:"右冠動脈 近位部",dom:null,
+  run:"大動脈の右冠尖から出て、右房と右室の間の溝(右房室間溝)を下りはじめる部分。最初の大きな枝である右室枝の分岐までを指します。",
+  area:"ここからは円錐枝と、約6割の人では洞結節枝が出ます。",
+  clin:"ここが詰まると、右室梗塞を伴う広い下壁梗塞になりやすく、徐脈や血圧低下を起こすことがあります。",segs:[3,4,9,10,15]},
+ {id:"rca2",aha:"#2",ab:"RCA中間",art:"RCA",name:"右冠動脈 中間部",dom:null,
+  run:"右室枝の分岐から鋭縁枝の分岐まで。右房室間溝に沿って心臓の右の縁を回ります。",
+  area:"右室の自由壁を養う枝(右室枝)を出します。",clin:"右室の動き(TAPSEなど)の低下と関係します。",segs:[]},
+ {id:"rca3",aha:"#3",ab:"RCA遠位",art:"RCA",name:"右冠動脈 遠位部",dom:"R",
+  run:"鋭縁枝から、心臓の裏側(横隔膜面)の十字部(クラックス)で後下行枝が出るまで。",
+  area:"心臓の下縁を回り込んで裏側へ向かいます。",clin:"右冠優位の人では、ここから先が下壁の主な血流源です。",segs:[]},
+ {id:"rca4pd",aha:"#4PD",ab:"PDA",art:"RCA",name:"後下行枝(PDA)",dom:"R",
+  run:"心臓の裏側、左右の心室の境目(後室間溝)を心尖に向かって下ります。",
+  area:"下壁と、心室中隔の下1/3。後内側乳頭筋もここから血流を受けることが多いです。",
+  clin:"右冠優位(約8割)ではRCAから出ます。この枝の領域の梗塞で後内側乳頭筋が断裂し、急性の僧帽弁逆流を起こすことがあります。",segs:[3,4,9,10,15]},
+ {id:"rca4av",aha:"#4AV",ab:"4AV",art:"RCA",name:"房室結節枝・後側壁枝",dom:"R",
+  run:"十字部から左の房室間溝に沿って進み、房室結節枝と左室の後側壁へ向かう枝を出します。",
+  area:"房室結節(約9割はRCAから)と、左室下壁〜下側壁の一部。",
+  clin:"閉塞すると房室ブロックを起こすことがあります。",segs:[4,5]},
+ {id:"cb",aha:"CB",ab:"円錐枝",art:"RCA",name:"円錐枝",dom:null,small:1,
+  run:"右冠動脈の最初の小さな枝(大動脈から別に出ることもあります)。右室流出路の前を回ります。",
+  area:"右室流出路(円錐部)。",clin:"LADが詰まったとき、LADへの側副血行路(ビューセンス輪)になることがあります。",segs:[]},
+ {id:"sn",aha:"SN",ab:"洞結節枝",art:"RCA",name:"洞結節枝",dom:null,small:1,
+  run:"右冠動脈の近位部から上へ向かい、上大静脈の付け根にある洞結節へ。",
+  area:"洞結節(約6割はRCA、残りはLCxから)。",clin:"閉塞すると洞機能不全(徐脈)の原因になります。",segs:[]},
+ {id:"rvb",aha:"RV",ab:"右室枝",art:"RCA",name:"右室枝",dom:null,small:1,
+  run:"右冠動脈の中間部から右室の前面を下る枝。",area:"右室の自由壁。",clin:"近位RCA閉塞でここが途絶えると右室梗塞になります。エコーでは右室の拡大と動きの低下が見えます。",segs:[]},
+ {id:"am",aha:"AM",ab:"鋭縁枝",art:"RCA",name:"鋭縁枝",dom:null,small:1,
+  run:"心臓の右下の鋭い縁(鋭縁)に沿って心尖方向へ下る枝。",area:"右室の下側の自由壁。",clin:"#2と#3の境目の目印になります。",segs:[]},
+
+ {id:"lmt",aha:"#5",ab:"LMT",art:"LAD",name:"左冠動脈主幹部(LMT)",dom:null,
+  run:"大動脈の左冠尖から出て、肺動脈の後ろを通り、LADとLCxに分かれるまでの短い幹(長さ1cm前後)。",
+  area:"左室のほぼ全体(LADとLCxの両方の領域)。",
+  clin:"ここが狭くなると左室の広い範囲が一度に虚血になり、命に関わります。治療方針の判断でも特別扱いされる部位です。",segs:[1,2,5,6,7,8,11,12,13,14,16,17]},
+ {id:"lad6",aha:"#6",ab:"LAD近位",art:"LAD",name:"左前下行枝 近位部",dom:null,
+  run:"分岐部から第1中隔枝が出るところまで。前室間溝を下りはじめます。",
+  area:"前壁・前壁中隔・心尖部の広い範囲。",clin:"ここの閉塞は広範な前壁梗塞となり、左室機能が大きく落ちます。",segs:[1,2,7,8,13,14,17]},
+ {id:"lad7",aha:"#7",ab:"LAD中間",art:"LAD",name:"左前下行枝 中間部",dom:null,
+  run:"第1中隔枝から第2対角枝まで。",area:"中部〜心尖部の前壁・前壁中隔。",clin:"",segs:[7,8,13,14,17]},
+ {id:"lad8",aha:"#8",ab:"LAD遠位",art:"LAD",name:"左前下行枝 遠位部",dom:null,
+  run:"第2対角枝より先、心尖に向かう部分。心尖を回り込んで裏側(下壁の心尖寄り)まで届く人も多いです。",
+  area:"心尖部。回り込むタイプでは心尖部下壁も。",clin:"心尖部の壁運動異常や心尖部血栓は、この領域の梗塞後に起こりやすいです。",segs:[13,14,15,17]},
+ {id:"d1",aha:"#9",ab:"D1",art:"LAD",name:"第1対角枝(D1)",dom:null,
+  run:"LADから左斜め下(側壁方向)へ分かれる最初の対角枝。",area:"前壁〜前側壁。",clin:"",segs:[7,12]},
+ {id:"d2",aha:"#10",ab:"D2",art:"LAD",name:"第2対角枝(D2)",dom:null,
+  run:"LADからさらに先で分かれる対角枝。",area:"前側壁の心尖寄り。",clin:"",segs:[12,16]},
+ {id:"sp",aha:"SP",ab:"中隔枝",art:"LAD",name:"中隔枝(中隔穿通枝)",dom:null,small:1,
+  run:"LADから心室中隔の中へ、ほぼ直角にもぐり込む細い枝。何本も出ます。",area:"心室中隔の前2/3。",
+  clin:"閉塞性肥大型心筋症の治療(経皮的中隔心筋焼灼術)で使われる枝です。",segs:[2,8,14]},
+ {id:"lcx11",aha:"#11",ab:"LCx近位",art:"LCX",name:"左回旋枝 近位部",dom:null,
+  run:"分岐部から鈍縁枝が出るまで。左の房室間溝を、左心耳の下を通って後ろへ回ります。",
+  area:"側壁(前側壁・下側壁)。",clin:"LCx領域の梗塞は心電図に出にくく、エコーの壁運動で見つかることがあります。",segs:[5,6,11,12,16]},
+ {id:"om",aha:"#12",ab:"OM",art:"LCX",name:"鈍縁枝(OM)",dom:null,
+  run:"左室の左側の丸い縁(鈍縁)に沿って心尖方向へ下る枝。",area:"前側壁〜下側壁。前外側乳頭筋(LADとの二重支配)。",clin:"",segs:[6,12,16]},
+ {id:"lcx13",aha:"#13",ab:"LCx遠位",art:"LCX",name:"左回旋枝 遠位部",dom:null,
+  run:"鈍縁枝より先、房室間溝をさらに後ろへ進む部分。",area:"下側壁。",clin:"",segs:[5,11]},
+ {id:"pl",aha:"#14",ab:"PL",art:"LCX",name:"後側壁枝(PL)",dom:null,
+  run:"回旋枝の遠位から左室の後ろ側へ下る枝。",area:"下側壁。",clin:"",segs:[5,11]},
+ {id:"lcx15",aha:"#15",ab:"PD(LCx)",art:"LCX",name:"後下行枝(左冠優位)",dom:"L",
+  run:"左冠優位(約1割)の人では、回旋枝が十字部まで回り込み、そこから後下行枝が出ます。",
+  area:"下壁・下壁中隔。",clin:"この場合、LCxの近位閉塞で側壁と下壁が同時にやられ、範囲が広くなります。",segs:[3,4,9,10,15]}
+];
+(function(){
+  if(!window.THREE)return;
+  const box=$("cor3d"), lab=$("corLabels"), tip=$("corTip");
+  const R=new THREE.WebGLRenderer({antialias:true,alpha:true});R.setPixelRatio(Math.min(2,devicePixelRatio));box.prepend(R.domElement);
+  const scene=new THREE.Scene(), cam=new THREE.PerspectiveCamera(32,1,.1,100);cam.position.set(0,.2,9.5);
+  scene.add(new THREE.HemisphereLight(0xe6eefc,0x2a1c1c,.95));
+  const dl=new THREE.DirectionalLight(0xffffff,.8);dl.position.set(3,5,7);scene.add(dl);
+  const dl2=new THREE.DirectionalLight(0xbcd2ff,.45);dl2.position.set(-3,-2,-7);scene.add(dl2);
+  const world=new THREE.Group();scene.add(world);
+  const heart=new THREE.Group();world.add(heart);
+  const q=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1,0,0),deg(-25)).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,0,1),deg(40)));
+  heart.quaternion.copy(q);heart.position.copy(new THREE.Vector3(0,.3,0).applyQuaternion(q).negate());
+  const V=(x,y,z)=>new THREE.Vector3(x,y,z);
+  const surf=[];
+  const sm=(col,op=.55)=>{const m=new THREE.MeshStandardMaterial({color:col,roughness:.7,transparent:true,opacity:op,depthWrite:false});surf.push(m);return m};
+  function blob(sc,pos,col,taper=0,rz=0){const g=new THREE.SphereGeometry(1,40,28);
+    if(taper){const p=g.attributes.position;for(let i=0;i<p.count;i++){const y=p.getY(i);if(y<0){const f=1+taper*y;p.setX(i,p.getX(i)*f);p.setZ(i,p.getZ(i)*f)}}g.computeVertexNormals()}
+    const m=new THREE.Mesh(g,sm(col));m.scale.set(...sc);m.position.copy(pos);m.rotation.z=rz;m.renderOrder=1;heart.add(m)}
+  blob([.78,1.3,.78],V(.35,-.25,0),0xa8484a,.28);blob([.62,1,.55],V(-.5,-.05,.38),0xb85a58,.3,.12);
+  blob([.58,.46,.52],V(.25,1.25,-.6),0xc77a6e);blob([.6,.66,.57],V(-.95,1,-.1),0xc98476);
+  const tube=(pts,r,mat)=>new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),Math.max(30,pts.length*18),r,12,false),mat);
+  const ao=tube([V(0,.8,.05),V(-.05,1.5,.12),V(0,2.1,.05)],.24,sm(0xd04a46,.75));heart.add(ao);
+  const pa=tube([V(-.35,.9,.75),V(-.15,1.55,.75),V(.2,1.95,.45)],.21,sm(0x6d6fc4,.6));heart.add(pa);
+  const lvPt=(f,y)=>{const yl=clamp((y+.25)/1.3,-.995,.995),s=Math.sqrt(1-yl*yl),t=yl<0?1+.28*yl:1;return V(.35+.78*t*s*Math.cos(deg(f))*1.07,y,.78*t*s*Math.sin(deg(f))*1.07)};
+  const rvPt=(f,y)=>{const yl=clamp((y+.05)/1.0,-.99,.99),s=Math.sqrt(1-yl*yl),t=yl<0?1+.3*yl:1;return V(-.5+.62*t*s*Math.cos(deg(f))*1.09,y,.38+.55*t*s*Math.sin(deg(f))*1.09)};
+  const RO=V(-.12,1.0,.38), LO=V(.03,.98,.3), BIF=lvPt(112,1.0);
+  const crux=lvPt(-128,.55);
+  const PTS={
+    rca1:[RO,rvPt(85,.83),rvPt(110,.79),rvPt(132,.75)], rca2:[rvPt(132,.75),rvPt(155,.71),rvPt(176,.67)],
+    rca3:[rvPt(176,.67),rvPt(205,.62),rvPt(240,.57),crux], rca4pd:[crux,lvPt(-120,.15),lvPt(-114,-.5),lvPt(-104,-1.15)],
+    rca4av:[crux,lvPt(-108,.7),lvPt(-88,.76),lvPt(-80,.3)],
+    cb:[rvPt(85,.83),rvPt(70,.62),rvPt(55,.42)], sn:[rvPt(108,.8),V(-.75,1.35,.2),V(-.92,1.7,.02)],
+    rvb:[rvPt(132,.75),rvPt(128,.25),rvPt(122,-.3)], am:[rvPt(176,.67),rvPt(182,0),rvPt(188,-.6)],
+    lmt:[LO,V(.08,1.0,.42),BIF],
+    lad6:[BIF,lvPt(116,.82),lvPt(118,.5)], lad7:[lvPt(118,.5),lvPt(120,.2),lvPt(120,-.1)],
+    lad8:[lvPt(120,-.1),lvPt(118,-.65),lvPt(110,-1.2),lvPt(60,-1.52)],
+    d1:[lvPt(117,.6),lvPt(88,.3),lvPt(62,-.15),lvPt(48,-.55)], d2:[lvPt(120,-.1),lvPt(95,-.42),lvPt(72,-.85)],
+    lcx11:[BIF,lvPt(85,.99),lvPt(45,.97),lvPt(18,.95)], om:[lvPt(18,.95),lvPt(8,.45),lvPt(0,-.15),lvPt(-6,-.75)],
+    lcx13:[lvPt(18,.95),lvPt(-20,.92),lvPt(-55,.88)], pl:[lvPt(-48,.89),lvPt(-55,.35),lvPt(-60,-.35)],
+    lcx15:[lvPt(-55,.88),lvPt(-95,.74),crux,lvPt(-120,.15),lvPt(-114,-.5),lvPt(-104,-1.15)]
+  };
+  const SPP=[[124,.5],[124,.15],[123,-.2]];
+  const groups={}, hits=[], labs=[];
+  const LCOL={LAD:"#5b9dff",LCX:"#3cc9a0",RCA:"#f07a8c"};
+  BR.forEach(b=>{
+    const col=new THREE.Color(b.id==="lmt"?"#8fb7ff":LCOL[b.art]);
+    const mat=new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:.3,roughness:.4});
+    const g=new THREE.Group();g.userData.b=b;heart.add(g);
+    const r=b.small?.028:(b.id==="lmt"?.06:.045);
+    const add=pts=>{g.add(tube(pts,r,mat));const h=tube(pts,.13,new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false}));h.userData.b=b;g.add(h);hits.push(h)};
+    if(b.id==="sp")SPP.forEach(([f,y])=>{const a=lvPt(f,y),c=a.clone().lerp(V(-.08,y-.12,.25),.9);add([a,a.clone().lerp(c,.5).add(V(0,-.04,0)),c])});
+    else add(PTS[b.id]);
+    groups[b.id]={g,mat,col};
+    const pts=b.id==="sp"?[lvPt(124,.15)]:PTS[b.id], mid=new THREE.Object3D();mid.position.copy(pts[Math.floor(pts.length/2)]);heart.add(mid);
+    const e=document.createElement("div");e.className="cl";e.textContent=b.aha;e.style.color=col.getStyle();lab.appendChild(e);labs.push([mid,e,b]);
+  });
+  const st={dom:"R",sel:"lmt",hov:null,num:true};
+  const shown=b=>!b.dom||b.dom===st.dom;
+  function refresh(){
+    BR.forEach(b=>{const G=groups[b.id];G.g.visible=shown(b);const on=b.id===st.sel||b.id===st.hov;
+      G.mat.emissiveIntensity=on?1:.3;G.g.children.forEach(m=>{if(m.material===G.mat)m.scale.setScalar(1)})});
+    document.querySelectorAll("#bList .bchip").forEach(c=>{const b=BR.find(x=>x.id===c.dataset.b);c.disabled=!shown(b);c.setAttribute("aria-pressed",b.id===st.sel)});
+    card();
+  }
+  /* 枝のリスト */
+  const grp=[["RCA","右冠動脈 (RCA)"],["LAD","左主幹部・左前下行枝 (LMT・LAD)"],["LCX","左回旋枝 (LCx)"]];
+  $("bList").innerHTML=grp.map(([a,t])=>`<div class="bgroup"><span class="gl">${t}</span><div class="bchips">${BR.filter(b=>b.art===a).map(b=>`<button class="bchip" data-b="${b.id}" style="--c:${b.id==="lmt"?"#8fb7ff":LCOL[a]}"><b>${b.aha}</b>${b.ab}</button>`).join("")}</div></div>`).join("");
+  $("bList").addEventListener("click",e=>{const c=e.target.closest(".bchip");if(c&&!c.disabled){st.sel=c.dataset.b;refresh()}});
+  function card(){
+    const b=BR.find(x=>x.id===st.sel), c=b.id==="lmt"?"#8fb7ff":LCOL[b.art];
+    const views=b.segs.length?VIEWS.filter(v=>v.segs.some(s=>b.segs.includes(s))):[];
+    $("bCard").style.setProperty("--c",c);
+    $("bCard").innerHTML=`<h4>${b.name}</h4><div class="meta">AHA分類 ${b.aha}${b.dom==="R"?" ・右冠優位のとき":b.dom==="L"?" ・左冠優位のとき":""}</div>
+      <p>${b.run}</p><dl><dt>養う場所</dt><dd>${b.area}</dd>${b.clin?`<dt>臨床のポイント</dt><dd>${b.clin}</dd>`:""}
+      ${b.segs.length?`<dt>17分画</dt><dd>${b.segs.join(", ")}</dd><dt>エコーで見るなら</dt><dd>${views.map(v=>`<button class="vlink" data-v="${v.id}">${v.ab}</button>`).join("")}</dd>`:""}</dl>`;
+  }
+  $("bCard").addEventListener("click",e=>{const v=e.target.closest(".vlink");if(v){setView(v.dataset.v);document.querySelector(".stage").scrollIntoView({behavior:"smooth"})}});
+  /* トグル */
+  const setDom=d=>{st.dom=d;$("cDomR").setAttribute("aria-pressed",d==="R");$("cDomL").setAttribute("aria-pressed",d==="L");if(!shown(BR.find(b=>b.id===st.sel)))st.sel=d==="R"?"rca4pd":"lcx15";refresh()};
+  $("cDomR").onclick=()=>setDom("R");$("cDomL").onclick=()=>setDom("L");
+  $("cSurf").onclick=()=>{const on=$("cSurf").getAttribute("aria-pressed")!=="true";$("cSurf").setAttribute("aria-pressed",on);surf.forEach(m=>{m.visible=on})};
+  $("cNum").onclick=()=>{st.num=!st.num;$("cNum").setAttribute("aria-pressed",st.num)};
+  let rot=null;
+  $("cFront").onclick=()=>{rot=[.1,0]};$("cBack").onclick=()=>{rot=[.45,Math.PI]};
+  /* 操作 */
+  world.rotation.set(.1,-.3,0);
+  const ptrs=new Map();let moved=0,pinch0=0,z0=9.5;
+  const ray=new THREE.Raycaster(),mv=new THREE.Vector2();
+  function pick(e){const r=box.getBoundingClientRect();mv.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(mv,cam);
+    const h=ray.intersectObjects(hits.filter(m=>m.parent.visible),false)[0];return h?h.object.userData.b:null}
+  box.addEventListener("pointerdown",e=>{box.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,[e.clientX,e.clientY]);moved=0;rot=null;if(ptrs.size===2){const[a,b]=[...ptrs.values()];pinch0=Math.hypot(a[0]-b[0],a[1]-b[1]);z0=cam.position.z}});
+  box.addEventListener("pointermove",e=>{
+    if(!ptrs.has(e.pointerId)){const b=pick(e),r=box.getBoundingClientRect();st.hov=b?b.id:null;tip.hidden=!b;if(b){tip.textContent=`${b.aha} ${b.name}`;tip.style.left=(e.clientX-r.left+12)+"px";tip.style.top=(e.clientY-r.top+10)+"px"}refresh();return}
+    const p=ptrs.get(e.pointerId);moved+=Math.abs(e.clientX-p[0])+Math.abs(e.clientY-p[1]);
+    if(ptrs.size===1){world.rotation.y+=(e.clientX-p[0])*.008;world.rotation.x=clamp(world.rotation.x+(e.clientY-p[1])*.008,-1.4,1.4)}
+    ptrs.set(e.pointerId,[e.clientX,e.clientY]);
+    if(ptrs.size===2){const[a,b]=[...ptrs.values()];cam.position.z=clamp(z0*pinch0/Math.hypot(a[0]-b[0],a[1]-b[1]),5,16)}});
+  const up=e=>{if(ptrs.has(e.pointerId)&&ptrs.size===1&&moved<6){const b=pick(e);if(b){st.sel=b.id;refresh()}}ptrs.delete(e.pointerId)};
+  box.addEventListener("pointerup",up);box.addEventListener("pointercancel",e=>ptrs.delete(e.pointerId));
+  box.addEventListener("pointerleave",()=>{tip.hidden=true;if(st.hov){st.hov=null;refresh()}});
+  box.addEventListener("wheel",e=>{e.preventDefault();cam.position.z=clamp(cam.position.z*(1+e.deltaY*.001),5,16)},{passive:false});
+  function size(){const w=box.clientWidth,h=box.clientHeight;R.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()}
+  new ResizeObserver(size).observe(box);size();
+  let vis=true;new IntersectionObserver(es=>{vis=es[0].isIntersecting}).observe(box);
+  const tmp=new THREE.Vector3();
+  (function frame(){
+    requestAnimationFrame(frame);if(!vis)return;
+    if(rot){world.rotation.x=lerp(world.rotation.x,rot[0],.12);let dy=rot[1]-world.rotation.y;dy=Math.atan2(Math.sin(dy),Math.cos(dy));world.rotation.y+=dy*.12;if(Math.abs(dy)<.002)rot=null}
+    R.render(scene,cam);
+    const w=box.clientWidth,h=box.clientHeight;
+    for(const[o,e,b]of labs){if(!st.num||!shown(b)){e.hidden=true;continue}o.getWorldPosition(tmp);tmp.project(cam);e.hidden=false;e.style.left=((tmp.x+1)/2*w)+"px";e.style.top=((1-tmp.y)/2*h)+"px";e.style.background=b.id===st.sel?"rgba(217,178,111,.25)":""}
+  })();
+  window.COR={PTS,SPP,lvPt,q,hp:heart.position.clone()};
+  refresh();
+})();
+
+/* ===== 冠動脈造影(CAG)シミュレーター ===== */
+/* 体の座標:+X=患者の左、+Y=頭側、+Z=前方(仰臥位では天井側)。受像器の向き d から見た平行投影で描く */
+const XPRE={
+ L:[
+  {a:-30,c:-30,n:"RAO30° CAU30°",best:"LMT、LCx近位〜中間、鈍縁枝(OM)、LAD近位",lead:"左冠動脈の基本の1枚目。LCx と OM が重ならずに広がって見えます。",tip:"LAD は画面の上を心尖へ、LCx は下側を背骨のほうへ走ります。"},
+  {a:-30,c:30,n:"RAO30° CRA30°",best:"LAD中間〜遠位、対角枝の分岐部",lead:"LAD の中間から先を長く伸ばして見る角度。対角枝が LAD から離れて見えます。",tip:"横隔膜が重なりやすいので、深く息を吸って止めてもらいます。"},
+  {a:0,c:35,n:"AP CRA35°",best:"LAD近位〜中間、中隔枝と対角枝",lead:"LAD を正面から見下ろす角度。中隔枝と対角枝が LAD の左右に分かれます。",tip:"中隔枝は LAD からほぼ直角に出る細い枝です。"},
+  {a:45,c:30,n:"LAO45° CRA30°",best:"LAD中間部、対角枝の起始、中隔枝",lead:"LAD が画面の縦方向に走り、中隔枝(左側)と対角枝(右側)が分かれて見えます。",tip:"背骨は画面の右側に見えます。"},
+  {a:50,c:-30,n:"LAO50° CAU30°(スパイダー)",best:"LMT分岐部、LAD・LCx の入口",lead:"左主幹部から LAD と LCx が分かれる様子が、クモの足のように広がって見えます。",tip:"心臓が短く縮んで見えるので、遠位部の評価には向きません。"},
+  {a:0,c:-30,n:"AP CAU30°",best:"LMT、LCx近位",lead:"左主幹部と回旋枝の入口を見る角度。",tip:"LAD 近位は短縮して見えます。"}
+ ],
+ R:[
+  {a:45,c:0,n:"LAO45°",best:"RCA #1〜#3 の全体",lead:"右冠動脈が「C」の字に見える、基本の1枚目です。",tip:"背骨が画面の右に見えます。"},
+  {a:-30,c:0,n:"RAO30°",best:"RCA #2〜#3、後下行枝の走行",lead:"右冠動脈が「L」の字に見えます。後下行枝が心尖に向かって下る様子が分かります。",tip:"背骨は画面の左側です。"},
+  {a:30,c:25,n:"LAO30° CRA25°",best:"十字部、後下行枝(#4PD)と房室結節枝(#4AV)の分岐",lead:"RCA の遠位で 2 本に分かれるところを開いて見る角度です。",tip:"横隔膜が重なりやすいので、深吸気で撮ります。"},
+  {a:0,c:30,n:"AP CRA30°",best:"RCA遠位、後下行枝・後側壁枝",lead:"十字部より先の枝を広げて見る角度。",tip:""}
+ ]
+};
+(function(){
+  if(!window.THREE||!window.COR)return;
+  const {PTS,SPP,lvPt}=window.COR, V=(x,y,z)=>new THREE.Vector3(x,y,z);
+  /* 造影用の心臓の向き:心尖が「左・前・やや下」を向く(長軸 ≈ 左62%・前66%・下42%) */
+  const q=new THREE.Quaternion().setFromAxisAngle(V(1,0,0),deg(-57.7)).multiply(new THREE.Quaternion().setFromAxisAngle(V(0,0,1),deg(38.3)));
+  const cen=new THREE.Vector3();{let n=0;for(const k in PTS)for(const p of PTS[k]){cen.add(p.clone().applyQuaternion(q));n++}cen.divideScalar(n)}
+  const hp=V(.45,0,.2).sub(cen), FOC=V(.45,0,.2);
+  const box=$("xray"), lab=$("xLabels");
+  /* X線像:白背景に乗算合成で、血管の重なりほど黒くなる */
+  const R=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:false});R.setPixelRatio(Math.min(2,devicePixelRatio));R.setClearColor(0xbdbdb8);box.prepend(R.domElement);
+  const scene=new THREE.Scene(), cam=new THREE.OrthographicCamera(-2.3,2.3,2.3,-2.3,.1,40);
+  const heart=new THREE.Group();heart.quaternion.copy(q);heart.position.copy(hp);scene.add(heart);
+  const toBody=v=>v.clone().applyQuaternion(q).add(hp);
+  const mul=(g)=>new THREE.MeshBasicMaterial({color:g,blending:THREE.MultiplyBlending,premultipliedAlpha:true,transparent:true,depthTest:false,depthWrite:false,side:THREE.DoubleSide});
+  /* 奥行きカラー用:受像器に近いほどオレンジ、遠いほど青 */
+  const depthMat=new THREE.ShaderMaterial({uniforms:{zn:{value:-6},zf:{value:-12}},depthTest:false,depthWrite:false,
+    vertexShader:"varying float vz;void main(){vec4 mv=modelViewMatrix*vec4(position,1.);vz=mv.z;gl_Position=projectionMatrix*mv;}",
+    fragmentShader:"uniform float zn,zf;varying float vz;void main(){float t=clamp((vz-zf)/(zn-zf),0.,1.);gl_FragColor=vec4(mix(vec3(.15,.35,.95),vec3(1.,.5,.08),t),1.);}"});
+  const vMat=mul(0x202020), cathM=mul(0x3a3a3a);
+  const tube=(pts,r,m,seg)=>new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts),seg||Math.max(30,pts.length*18),r,10,false),m);
+  const LCA=["lmt","lad6","lad7","lad8","d1","d2","sp","lcx11","om","lcx13","pl","lcx15"], RCA=["rca1","rca2","rca3","rca4pd","rca4av","cb","sn","rvb","am"];
+  const T0={lmt:0,lad6:.14,lcx11:.14,lad7:.28,d1:.3,sp:.3,om:.3,lcx13:.3,lad8:.42,d2:.42,pl:.45,lcx15:.5,rca1:0,cb:.06,sn:.1,rca2:.18,rvb:.24,rca3:.34,am:.32,rca4pd:.5,rca4av:.5};
+  const SHORT={lmt:"#5 LMT",lad6:"#6",lad7:"#7",lad8:"#8",d1:"#9 D1",d2:"#10 D2",sp:"中隔枝",lcx11:"#11",om:"#12 OM",lcx13:"#13",pl:"#14 PL",lcx15:"#15 PD",rca1:"#1",rca2:"#2",rca3:"#3",rca4pd:"#4PD",rca4av:"#4AV",cb:"円錐枝",sn:"洞結節枝",rvb:"右室枝",am:"鋭縁枝"};
+  const ves={};
+  for(const id of LCA.concat(RCA)){
+    const g=new THREE.Group();heart.add(g);const r=id==="lmt"?.07:id.startsWith("rca")?.06:(["sp","cb","sn","rvb","am"].includes(id)?.03:.05);
+    if(id==="sp")SPP.forEach(([f,y])=>{const a=lvPt(f,y),c=a.clone().lerp(V(-.08,y-.12,.25),.9);g.add(tube([a,a.clone().lerp(c,.5).add(V(0,-.04,0)),c],r,vMat))});
+    else g.add(tube(PTS[id],r,vMat));
+    const pts=id==="sp"?[lvPt(124,.15)]:PTS[id],o=new THREE.Object3D();o.position.copy(pts[Math.floor(pts.length/2)]);heart.add(o);
+    const e=document.createElement("div");e.className="xl";e.textContent=SHORT[id];lab.appendChild(e);
+    ves[id]={g,o,e,dom:id==="lcx15"?"L":(["rca3","rca4pd","rca4av"].includes(id)?"R":null)};
+  }
+  /* 背景:心陰影・脊椎・横隔膜・肋骨 */
+  const bone=new THREE.Group();scene.add(bone);
+  const hs=new THREE.Mesh(new THREE.SphereGeometry(1,32,24),mul(0xe4e4e2));hs.scale.set(1.25,1.55,1.15);hs.position.copy(toBody(V(0,0,0)));hs.quaternion.copy(q);scene.add(hs);
+  const TH=buildThorax({mid:0,bone:mul(0xd9d9d6),cart:mul(0xeeeeec),spine:mul(0xcacac6)});
+  const APX3=toBody(V(.35,-1.55,0));{const p5=TH.ics(5,APX3.x);TH.group.position.set(0,APX3.y-p5.y,APX3.z+.35-p5.z)}
+  const DZ=TH.group.position.z-1.87+.6;   /* 下行大動脈:胸椎のすぐ左前 */
+  bone.add(TH.group);
+  const dia=new THREE.Mesh(new THREE.SphereGeometry(3.2,40,24,0,Math.PI*2,0,Math.PI/2),mul(0xd6d6d3));dia.position.set(0,APX3.y-.35-1.76,-.5);dia.scale.set(1.1,.55,.8);bone.add(dia);
+  /* カテーテル(大腿動脈→下行大動脈→弓部→上行大動脈→冠動脈入口) */
+  const AJ=toBody(V(0,.85,.05)), add=(x,y,z)=>AJ.clone().add(V(x,y,z));
+  const cathBase=[V(.35,-4.5,DZ),V(.35,-1,DZ),V(.35,AJ.y+.9,DZ+.1),V(.2,AJ.y+1.5,(DZ+AJ.z)/2),add(-.05,1.45,-.25),add(-.15,.95,.05),add(-.15,.55,.1)];
+  let cath=null;
+  function setCath(side){if(cath){scene.remove(cath);cath.geometry.dispose()}
+    const tipT=side==="L"?toBody(V(.03,.98,.3)):toBody(V(-.12,1.0,.38));
+    const pts=cathBase.concat(side==="L"?[add(.05,.35,.05),add(.2,.25,.15),tipT]:[add(-.25,.45,.2),tipT]);
+    cath=tube(pts,.035,cathM,160);scene.add(cath)}
+  /* 状態 */
+  const st={side:"L",a:-30,c:-30,lab:true,depth:false,wob:false,fill:1,fillT0:0,dom:"R"};
+  const dirOf=(a,c)=>V(Math.sin(deg(a))*Math.cos(deg(c)),Math.sin(deg(c)),Math.cos(deg(a))*Math.cos(deg(c)));
+  function place(a,c){const d=dirOf(a,c);cam.position.copy(d.clone().multiplyScalar(9).add(FOC));const up=V(0,1,0).sub(d.clone().multiplyScalar(d.y)).normalize();cam.up.copy(up);cam.lookAt(FOC)}
+  const fmt=(a,c)=>`${a<0?"RAO":a>0?"LAO":"AP"}${a?Math.abs(a)+"°":""} ${c>0?"CRA":c<0?"CAU":""}${c?Math.abs(c)+"°":""}`;
+  function ui(){
+    $("xAo").textContent=st.a<0?`RAO ${-st.a}°`:st.a>0?`LAO ${st.a}°`:"AP";$("xCo").textContent=st.c>0?`CRA ${st.c}°`:st.c<0?`CAU ${-st.c}°`:"0°";
+    $("xA").value=st.a;$("xC").value=st.c;$("xHud").innerHTML=`${fmt(st.a,st.c)}<small>${st.side==="L"?"左冠動脈造影":"右冠動脈造影"}・${st.dom==="R"?"右冠優位":"左冠優位"}</small>`;
+    const P=XPRE[st.side],m=P.find(p=>p.a===st.a&&p.c===st.c);
+    $("xPre").innerHTML=P.map((p,i)=>`<button class="bchip" data-i="${i}" style="--c:var(--accent)" aria-pressed="${p===m}">${p.n}</button>`).join("");
+    $("xCard").innerHTML=m?`<h4>${m.n}</h4><p>${m.lead}</p><dl><dt>よく見える所</dt><dd>${m.best}</dd>${m.tip?`<dt>コツ</dt><dd>${m.tip}</dd>`:""}</dl>`
+      :`<h4>${fmt(st.a,st.c)}(自由な角度)</h4><p>スライダーで角度を変えると、同じ血管の重なり方や長さが変わります。上の「よく使う角度」を押すと、その角度までCアームが回ります。</p>`;
+  }
+  function vis(){for(const id in ves){const v=ves[id],on=(st.side==="L"?LCA:RCA).includes(id)&&(!v.dom||v.dom===st.dom);v.g.visible=on;v.on=on}
+    for(const id in ves)ves[id].g.children.forEach(m=>{m.material=st.depth?depthMat:vMat})}
+  let anim=null;
+  function goTo(a,c){anim={a0:st.a,c0:st.c,a1:a,c1:c,t:0}}
+  $("xPre").addEventListener("click",e=>{const b=e.target.closest(".bchip");if(!b)return;const p=XPRE[st.side][+b.dataset.i];goTo(p.a,p.c)});
+  $("xA").addEventListener("input",e=>{anim=null;st.a=+e.target.value;ui()});$("xC").addEventListener("input",e=>{anim=null;st.c=+e.target.value;ui()});
+  const side=s=>{st.side=s;$("xL").setAttribute("aria-pressed",s==="L");$("xR").setAttribute("aria-pressed",s==="R");setCath(s);vis();const p=XPRE[s][0];goTo(p.a,p.c);ui();startFill()};
+  $("xL").onclick=()=>side("L");$("xR").onclick=()=>side("R");
+  const tg=(id,k,f)=>{$(id).onclick=()=>{st[k]=!st[k];$(id).setAttribute("aria-pressed",st[k]);f&&f()}};
+  tg("xLab","lab");tg("xDepth","depth",vis);tg("xWob","wob");tg("xBone","bone",()=>{bone.visible=st.bone;hs.visible=st.bone});st.bone=true;
+  function startFill(){st.fill=0;st.fillT0=performance.now()}
+  $("xFill").onclick=startFill;
+  /* 左右の優位は上の冠動脈模式図と連動 */
+  ["cDomR","cDomL"].forEach(id=>$(id)&&$(id).addEventListener("click",()=>{st.dom=id==="cDomR"?"R":"L";vis();ui()}));
+  /* Cアームの3D図 */
+  const cbox=$("carm"), R2=new THREE.WebGLRenderer({antialias:true,alpha:true});R2.setPixelRatio(Math.min(2,devicePixelRatio));cbox.prepend(R2.domElement);
+  const s2=new THREE.Scene(), c2=new THREE.PerspectiveCamera(36,4/3,.1,100);c2.up.set(0,0,1);c2.position.set(7.5,-8.5,6.5);c2.lookAt(0,-.6,0);
+  s2.add(new THREE.HemisphereLight(0xe6eefc,0x2a2222,1));const d2=new THREE.DirectionalLight(0xffffff,.6);d2.position.set(4,-3,8);s2.add(d2);
+  const skin=new THREE.MeshStandardMaterial({color:0xd8c0a8,transparent:true,opacity:.28,depthWrite:false,roughness:.8});
+  const torso=new THREE.Mesh(new THREE.CylinderGeometry(1,1,7,32),skin);torso.scale.set(2.6,1,1.5);torso.position.set(0,-.8,-.4);s2.add(torso);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(1.1,24,16),skin);head.position.set(0,3.9,-.2);s2.add(head);
+  const h2=new THREE.Mesh(new THREE.SphereGeometry(1,24,16),new THREE.MeshStandardMaterial({color:0xb5524f}));h2.scale.set(.9,1.2,.85);h2.position.copy(FOC);h2.quaternion.copy(q);s2.add(h2);
+  const table=new THREE.Mesh(new THREE.BoxGeometry(5,11,.2),new THREE.MeshStandardMaterial({color:0x3a444c}));table.position.set(0,-1,-2.15);s2.add(table);
+  const arm=new THREE.Group();arm.position.copy(FOC);s2.add(arm);
+  const det=new THREE.Mesh(new THREE.BoxGeometry(2.2,2.2,.35),new THREE.MeshStandardMaterial({color:0xd9b26f}));det.position.z=4.4;arm.add(det);
+  const tubeX=new THREE.Mesh(new THREE.CylinderGeometry(.45,.55,.9,20),new THREE.MeshStandardMaterial({color:0x9aa7b0}));tubeX.rotation.x=Math.PI/2;tubeX.position.z=-4.2;arm.add(tubeX);
+  const cring=new THREE.Mesh(new THREE.TorusGeometry(4.6,.12,8,48,Math.PI),new THREE.MeshStandardMaterial({color:0x6f7d87}));cring.rotation.y=Math.PI/2;cring.rotation.x=Math.PI/2;arm.add(cring);
+  const beam=new THREE.Mesh(new THREE.CylinderGeometry(1.1,.1,8.2,24,1,true),new THREE.MeshBasicMaterial({color:0xffe6a8,transparent:true,opacity:.12,depthWrite:false,side:THREE.DoubleSide}));beam.rotation.x=Math.PI/2;beam.position.z=.1;arm.add(beam);
+  const mk2=(t,p)=>{const e=document.createElement("div");e.className="l3";e.textContent=t;cbox.appendChild(e);return[e,p]};
+  const L2=[mk2("頭側",V(0,4.9,0)),mk2("足側",V(0,-5.8,0)),mk2("患者の左",V(2.9,-.5,0)),mk2("受像器",null)];
+  function size(){for(const[b,r,c]of[[box,R,null],[cbox,R2,c2]]){const w=b.clientWidth,h=b.clientHeight;r.setSize(w,h,false);if(c){c.aspect=w/h;c.updateProjectionMatrix()}}}
+  new ResizeObserver(size).observe(box);new ResizeObserver(size).observe(cbox);size();
+  /* ノイズ */
+  {const g=$("xNoise").getContext("2d"),im=g.createImageData(256,256);for(let i=0;i<im.data.length;i+=4){const v=170+Math.random()*85;im.data[i]=im.data[i+1]=im.data[i+2]=v;im.data[i+3]=255}g.putImageData(im,0,0)}
+  const OR=[["xoL",V(1,0,0)],["xoR",V(-1,0,0)],["xoH",V(0,1,0)],["xoF",V(0,-1,0)]];
+  let seen=true;new IntersectionObserver(es=>{seen=es[0].isIntersecting}).observe($("cag"));
+  const tmp=new THREE.Vector3();let last=performance.now();
+  (function frame(now){
+    requestAnimationFrame(frame);const dt=Math.min(.1,(now-last)/1000);last=now;if(!seen)return;
+    if(anim){anim.t=Math.min(1,anim.t+dt/1.2);const k=anim.t*anim.t*(3-2*anim.t);st.a=Math.round(lerp(anim.a0,anim.a1,k));st.c=Math.round(lerp(anim.c0,anim.c1,k));if(anim.t>=1)anim=null;ui()}
+    let a=st.a,c=st.c;if(st.wob){a+=Math.sin(now/600)*8;c+=Math.sin(now/950)*4}
+    place(a,c);
+    if(st.fill<1){st.fill=Math.min(1,(now-st.fillT0)/1600)}
+    for(const id in ves){const f=clamp((st.fill-T0[id])/.25,0,1);ves[id].g.children.forEach(m=>{const n=m.geometry.index.count;m.geometry.setDrawRange(0,Math.floor(n*f/6)*6)});ves[id].f=f}
+    const zc=-9;depthMat.uniforms.zn.value=zc+1.6;depthMat.uniforms.zf.value=zc-1.6;
+    R.render(scene,cam);
+    const w=box.clientWidth,h=box.clientHeight;
+    for(const id in ves){const v=ves[id];if(!st.lab||!v.on||v.f<.6){v.e.hidden=true;continue}v.o.getWorldPosition(tmp);tmp.project(cam);v.e.hidden=false;v.e.style.left=((tmp.x+1)/2*w)+"px";v.e.style.top=((1-tmp.y)/2*h)+"px"}
+    /* 向きの目印:患者の左右・頭足の方向を画面の端に出す(斜めから見て短縮される軸は薄く) */
+    {const c0=FOC.clone().project(cam);
+     for(const[id,ax]of OR){const p=FOC.clone().add(ax).project(cam),dx=p.x-c0.x,dy=p.y-c0.y,len=Math.hypot(dx,dy),e=$(id);
+       if(len<.03){e.hidden=true;continue}e.hidden=false;const ux=dx/len,uy=dy/len,k=.42/Math.max(Math.abs(ux),Math.abs(uy));
+       e.style.left=clamp((.5+ux*k)*100,11,89)+"%";e.style.top=clamp((.5-uy*k)*100,5,95)+"%";e.style.opacity=(.35+.65*Math.min(1,len/.43)).toFixed(2)}}
+    arm.quaternion.setFromUnitVectors(V(0,0,1),dirOf(a,c));
+    R2.render(s2,c2);
+    const w2=cbox.clientWidth,h2_=cbox.clientHeight;
+    for(const[e,p]of L2){const pp=p||det.getWorldPosition(new THREE.Vector3()).add(V(0,0,.8));tmp.copy(pp).project(c2);e.style.left=((tmp.x+1)/2*w2)+"px";e.style.top=((1-tmp.y)/2*h2_)+"px"}
+  })(performance.now());
+  setCath("L");vis();place(st.a,st.c);ui();
+})();
+</script>
+</body></html>
